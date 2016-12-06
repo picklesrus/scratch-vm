@@ -6,7 +6,8 @@ var webpack = require('webpack');
 var base = {
     devServer: {
         contentBase: path.resolve(__dirname, 'playground'),
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        port: process.env.PORT || 8073
     },
     module: {
         loaders: [
@@ -109,9 +110,6 @@ module.exports = [
                 to: 'media'
             }, {
                 from: 'node_modules/highlightjs/styles/zenburn.css'
-            }, {
-                from: 'assets',
-                to: 'assets'
             }])
         ])
     })

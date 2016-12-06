@@ -3,8 +3,6 @@ var util = require('util');
 
 var Runtime = require('./engine/runtime');
 var sb2import = require('./import/sb2import');
-var Sprite = require('./sprites/sprite');
-var Blocks = require('./engine/blocks');
 
 /**
  * Handles connections between blocks, stage, and extensions.
@@ -27,23 +25,29 @@ var VirtualMachine = function () {
      */
     instance.editingTarget = null;
     // Runtime emits are passed along as VM emits.
-    instance.runtime.on(Runtime.SCRIPT_GLOW_ON, function (id) {
-        instance.emit(Runtime.SCRIPT_GLOW_ON, {id: id});
+    instance.runtime.on(Runtime.SCRIPT_GLOW_ON, function (glowData) {
+        instance.emit(Runtime.SCRIPT_GLOW_ON, glowData);
     });
-    instance.runtime.on(Runtime.SCRIPT_GLOW_OFF, function (id) {
-        instance.emit(Runtime.SCRIPT_GLOW_OFF, {id: id});
+    instance.runtime.on(Runtime.SCRIPT_GLOW_OFF, function (glowData) {
+        instance.emit(Runtime.SCRIPT_GLOW_OFF, glowData);
     });
-    instance.runtime.on(Runtime.BLOCK_GLOW_ON, function (id) {
-        instance.emit(Runtime.BLOCK_GLOW_ON, {id: id});
+    instance.runtime.on(Runtime.BLOCK_GLOW_ON, function (glowData) {
+        instance.emit(Runtime.BLOCK_GLOW_ON, glowData);
     });
-    instance.runtime.on(Runtime.BLOCK_GLOW_OFF, function (id) {
-        instance.emit(Runtime.BLOCK_GLOW_OFF, {id: id});
+    instance.runtime.on(Runtime.BLOCK_GLOW_OFF, function (glowData) {
+        instance.emit(Runtime.BLOCK_GLOW_OFF, glowData);
     });
-    instance.runtime.on(Runtime.VISUAL_REPORT, function (id, value) {
-        instance.emit(Runtime.VISUAL_REPORT, {id: id, value: value});
+    instance.runtime.on(Runtime.PROJECT_RUN_START, function () {
+        instance.emit(Runtime.PROJECT_RUN_START);
     });
-    instance.runtime.on(Runtime.SPRITE_INFO_REPORT, function (data) {
-        instance.emit(Runtime.SPRITE_INFO_REPORT, data);
+    instance.runtime.on(Runtime.PROJECT_RUN_STOP, function () {
+        instance.emit(Runtime.PROJECT_RUN_STOP);
+    });
+    instance.runtime.on(Runtime.VISUAL_REPORT, function (visualReport) {
+        instance.emit(Runtime.VISUAL_REPORT, visualReport);
+    });
+    instance.runtime.on(Runtime.SPRITE_INFO_REPORT, function (spriteInfo) {
+        instance.emit(Runtime.SPRITE_INFO_REPORT, spriteInfo);
     });
 
     this.blockListener = this.blockListener.bind(this);
@@ -240,6 +244,7 @@ VirtualMachine.prototype.deleteSprite = function (targetId) {
 };
 
 /**
+<<<<<<< HEAD
  * Temporary way to make an empty project, in case the desired project
  * cannot be loaded from the online server.
  */
@@ -288,6 +293,8 @@ VirtualMachine.prototype.createEmptyProject = function () {
 };
 
 /**
+=======
+>>>>>>> 3989959ebf5649a6ee14eab8b0402c775a3eb8c9
  * Set the renderer for the VM/runtime
  * @param {!RenderWebGL} renderer The renderer to attach
  */

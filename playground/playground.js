@@ -1,11 +1,6 @@
-var NEW_PROJECT_HASH = 'createEmptyProject';
 
 var loadProject = function () {
     var id = location.hash.substring(1);
-    if (id === NEW_PROJECT_HASH) {
-        window.vm.createEmptyProject();
-        return;
-    }
     if (id.length < 1 || !isFinite(id)) {
         id = '119615668';
     }
@@ -16,8 +11,6 @@ var loadProject = function () {
         if (this.readyState === 4) {
             if (r.status === 200) {
                 window.vm.loadProject(this.responseText);
-            } else {
-                window.vm.createEmptyProject();
             }
         }
     };
@@ -36,11 +29,6 @@ window.onload = function() {
         document.location = '#' + document.getElementById('projectId').value;
         location.reload();
     };
-    document.getElementById('createEmptyProject').addEventListener('click',
-    function() {
-        document.location = '#' + NEW_PROJECT_HASH;
-        location.reload();
-    });
     loadProject();
 
     // Instantiate the renderer and connect it to the VM.
@@ -149,10 +137,10 @@ window.onload = function() {
     };
 
     // Feedback for stacks and blocks running.
-    vm.on('STACK_GLOW_ON', function(data) {
+    vm.on('SCRIPT_GLOW_ON', function(data) {
         workspace.glowStack(data.id, true);
     });
-    vm.on('STACK_GLOW_OFF', function(data) {
+    vm.on('SCRIPT_GLOW_OFF', function(data) {
         workspace.glowStack(data.id, false);
     });
     vm.on('BLOCK_GLOW_ON', function(data) {
