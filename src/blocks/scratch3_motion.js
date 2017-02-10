@@ -16,6 +16,7 @@ var Scratch3MotionBlocks = function (runtime) {
  */
 Scratch3MotionBlocks.prototype.getPrimitives = function () {
     return {
+        motion_movesteps_back: this.moveStepsBack,
         motion_movesteps: this.moveSteps,
         motion_gotoxy: this.goToXY,
         motion_goto: this.goTo,
@@ -34,6 +35,14 @@ Scratch3MotionBlocks.prototype.getPrimitives = function () {
         motion_yposition: this.getY,
         motion_direction: this.getDirection
     };
+};
+
+Scratch3MotionBlocks.prototype.moveStepsBack = function (args, util) {
+    var steps = -1 * Cast.toNumber(args.STEPS);
+    var radians = MathUtil.degToRad(90 - util.target.direction);
+    var dx = steps * Math.cos(radians);
+    var dy = steps * Math.sin(radians);
+    util.target.setXY(util.target.x + dx, util.target.y + dy);
 };
 
 Scratch3MotionBlocks.prototype.moveSteps = function (args, util) {

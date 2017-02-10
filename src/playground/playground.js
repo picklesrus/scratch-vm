@@ -1,7 +1,7 @@
 var loadProject = function () {
     var id = location.hash.substring(1);
     if (id.length < 1 || !isFinite(id)) {
-        id = '119615668';
+        id = '145123846';
     }
     var url = 'https://projects.scratch.mit.edu/internalapi/project/' +
         id + '/get/';
@@ -25,7 +25,7 @@ window.onload = function () {
 
     // Loading projects from the server.
     document.getElementById('projectLoadButton').onclick = function () {
-        document.location = '#' + document.getElementById('projectId').value;
+        document.location = '#145123846';
         location.reload();
     };
     loadProject();

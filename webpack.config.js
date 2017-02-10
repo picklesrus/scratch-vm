@@ -63,7 +63,8 @@ module.exports = [
                 // Syntax highlighter
                 'highlightjs/highlight.pack.min.js',
                 // Scratch Blocks
-                'scratch-blocks/dist/vertical.js',
+                'scratch-blocks/dist/horizontal.js',
+//                '../scratch-blocks/shim/horizontal.js',
                 // Renderer
                 'scratch-render',
                 // Audio
@@ -89,7 +90,7 @@ module.exports = [
                     loader: 'script-loader'
                 },
                 {
-                    test: require.resolve('scratch-blocks/dist/vertical.js'),
+                    test: require.resolve('scratch-blocks/dist/horizontal.js'),
                     loader: 'expose-loader?Blockly'
                 },
                 {

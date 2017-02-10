@@ -103,6 +103,10 @@ Scratch3LooksBlocks.prototype._setCostumeOrBackdrop = function (target,
         } else {
             var forcedNumber = Cast.toNumber(requestedCostume);
             if (!isNaN(forcedNumber)) {
+                if (forcedNumber == 99) {
+                    window.console.log('going random');
+                    forcedNumber = Math.floor(Math.random() * target.sprite.costumes.length);
+                }
                 target.setCostume(optZeroIndex ?
                     forcedNumber : forcedNumber - 1);
             }
