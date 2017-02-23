@@ -41,6 +41,8 @@ window.onload = function () {
     // Instantiate scratch-blocks and attach it to the DOM.
     var workspace = window.Blockly.inject('blocks', {
         media: './media/',
+        horizontalLayout: true,
+        toolboxPosition: 'start',
         zoom: {
             controls: true,
             wheel: true,
@@ -65,10 +67,10 @@ window.onload = function () {
     flyoutWorkspace.addChangeListener(vm.flyoutBlockListener);
 
     // Create FPS counter.
-    var stats = new window.Stats();
-    document.getElementById('tab-renderexplorer').appendChild(stats.dom);
-    stats.dom.style.position = 'relative';
-    stats.begin();
+  //  var stats = new window.Stats();
+//    document.getElementById('tab-renderexplorer').appendChild(stats.dom);
+  //  stats.dom.style.position = 'relative';
+//    stats.begin();
 
     // Playground data tabs.
     // Block representation tab.
@@ -239,7 +241,7 @@ window.onload = function () {
 
     // Inform VM of animation frames.
     var animate = function () {
-        stats.update();
+//        stats.update();
         requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
