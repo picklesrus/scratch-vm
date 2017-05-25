@@ -27,7 +27,8 @@ class Scratch3ProcedureBlocks {
         if (!util.stackFrame.executed) {
             const procedureCode = args.mutation.proccode;
             const paramNames = util.getProcedureParamNames(procedureCode);
-            for (let i = 0; i < paramNames.length; i++) {
+            var length = paramNames ? paramNames.length : 0;
+            for (let i = 0; i < length; i++) {
                 if (args.hasOwnProperty(`input${i}`)) {
                     util.pushParam(paramNames[i], args[`input${i}`]);
                 }

@@ -1,4 +1,5 @@
 const Cast = require('../util/cast');
+const Timer = require('../util/timer');
 
 class Scratch3LooksBlocks {
     constructor (runtime) {
@@ -27,6 +28,11 @@ class Scratch3LooksBlocks {
             looks_nextcostume: this.nextCostume,
             looks_nextbackdrop: this.nextBackdrop,
             looks_changeeffectby: this.changeEffect,
+            looks_fisheye: this.fisheye,
+            looks_color: this.color,
+            looks_pixelate: this.pixelate,
+            looks_mosaic: this.mosaic,
+            looks_whirl: this.whirl,
             looks_seteffectto: this.setEffect,
             looks_cleargraphiceffects: this.clearEffects,
             looks_changesizeby: this.changeSize,
@@ -133,7 +139,7 @@ class Scratch3LooksBlocks {
         this._setCostumeOrBackdrop(this.runtime.getTargetForStage(), args.BACKDROP);
     }
 
-    switchBackdropAndWait (args, util) {
+    switchBackdropAndWait(args, util) {
         // Have we run before, starting threads?
         if (!util.stackFrame.startedThreads) {
             // No - switch the backdrop.
@@ -170,7 +176,63 @@ class Scratch3LooksBlocks {
         const newValue = change + util.target.effects[effect];
         util.target.setEffect(effect, newValue);
     }
-
+    fisheye (args, util) {
+        var effect = 'fisheye';
+        const change = Cast.toNumber(args.CHANGE);
+        var newValue = change + util.target.effects[effect];
+        util.target.setEffect(effect, newValue);
+        // for (var i = 0; i < 10; i++) {
+        //   var newValue = 2 + util.target.effects[effect];
+        
+        //   this.runtime.requestRedraw();
+        //   this.wait(args, util);
+        // }
+        // for (var i = 0; i < 10; i++) {
+        //   var newValue = util.target.effects[effect] -2;
+        //   util.target.setEffect(effect, newValue);
+        //   this.runtime.requestRedraw();
+        //   this.wait(args, util);
+        // }        
+    }
+    wait (args, util) {
+        if (!util.stackFrame.timer) {
+            util.stackFrame.timer = new Timer();
+            util.stackFrame.timer.start();
+            util.yield();
+            this.runtime.requestRedraw();
+        } else {
+            var duration = .2 * 1000;
+            //const duration = Math.max(0, 1000 * Cast.toNumber(args.DURATION));
+            if (util.stackFrame.timer.timeElapsed() < duration) {
+                util.yield();
+            }
+        }
+    }
+    
+    pixelate (args, util) {
+        var effect = 'pixelate';
+        const change = Cast.toNumber(args.CHANGE);
+        var newValue = change + util.target.effects[effect];
+        util.target.setEffect(effect, newValue);
+    }
+    color (args, util) {
+        var effect = 'color';
+        const change = Cast.toNumber(args.CHANGE);
+        var newValue = change + util.target.effects[effect];
+        util.target.setEffect(effect, newValue);
+    }
+    whirl (args, util) {
+        var effect = 'whirl';
+        const change = Cast.toNumber(args.CHANGE);
+        var newValue = change + util.target.effects[effect];
+        util.target.setEffect(effect, newValue);
+    }
+    mosaic (args, util) {
+        var effect = 'mosaic';
+        const change = Cast.toNumber(args.CHANGE);
+        var newValue = change + util.target.effects[effect];
+        util.target.setEffect(effect, newValue);
+    }
     setEffect (args, util) {
         const effect = Cast.toString(args.EFFECT).toLowerCase();
         const value = Cast.toNumber(args.VALUE);
