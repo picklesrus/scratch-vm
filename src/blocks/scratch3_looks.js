@@ -22,6 +22,7 @@ class Scratch3LooksBlocks {
             looks_thinkforsecs: this.sayforsecs,
             looks_show: this.show,
             looks_hide: this.hide,
+            looks_reset: this.resetEverything,
             looks_switchcostumeto: this.switchCostume,
             looks_switchbackdropto: this.switchBackdrop,
             looks_switchbackdroptoandwait: this.switchBackdropAndWait,
@@ -241,6 +242,12 @@ class Scratch3LooksBlocks {
 
     clearEffects (args, util) {
         util.target.clearEffects();
+    }
+
+    resetEverything (args, util) {
+        util.target.clearEffects();
+        util.target.setSize(100);
+        util.target.setDirection(90);
     }
 
     changeSize (args, util) {
