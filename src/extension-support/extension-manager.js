@@ -9,10 +9,12 @@ const BlockType = require('./block-type');
 const Scratch3PenBlocks = require('../extensions/scratch3_pen');
 const Scratch3WeDo2Blocks = require('../extensions/scratch3_wedo2');
 const Scratch3MusicBlocks = require('../extensions/scratch3_music');
+const Scratch3TranslateBlocks = require('../extensions/scratch3_translate');
 const builtinExtensions = {
     pen: Scratch3PenBlocks,
     wedo2: Scratch3WeDo2Blocks,
-    music: Scratch3MusicBlocks
+    music: Scratch3MusicBlocks,
+    translate: Scratch3TranslateBlocks,
 };
 
 /**
@@ -118,7 +120,8 @@ class ExtensionManager {
             }
 
             const extension = builtinExtensions[extensionURL];
-            const extensionInstance = new extension(this.runtime);
+            // TODO: remove extension manager argument. Temp hack while dynamic menus don't work.
+            const extensionInstance = new extension(this.runtime, this);
             return this._registerInternalExtension(extensionInstance).then(serviceName => {
                 this._loadedExtensions.set(extensionURL, serviceName);
             });
