@@ -25,7 +25,7 @@ class Scratch3TranslateBlocks {
         this.manager = manager;
 
         // TEMP API KEY ************************
-        this.API_KEY = '';
+        this.API_KEY = this._parseApiKey();
         // ***************************************
 
         this.supportedLangauges = null;
@@ -42,6 +42,13 @@ class Scratch3TranslateBlocks {
         // Fill the menu with supported languages.
         this._getSupportedLanguages();
 
+    }
+
+    _parseApiKey() {
+    	var paramString = document.location.search;
+    	var urlParams = new URLSearchParams(paramString);
+    	var key = urlParams.get('eye');
+    	return key;
     }
 
  	/**
