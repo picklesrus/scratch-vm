@@ -1,7 +1,6 @@
 const EventEmitter = require('events');
 const {OrderedMap} = require('immutable');
 const escapeHtml = require('escape-html');
-const dispatch = require('../dispatch/central-dispatch');
 
 const ArgumentType = require('../extension-support/argument-type');
 const Blocks = require('./blocks');
@@ -552,23 +551,26 @@ class Runtime extends EventEmitter {
      */
     _buildMenuForScratchBlocks (menuName, menuItems, categoryInfo) {
         const menuId = this._makeExtensionMenuId(menuName, categoryInfo.id);
-        /** @TODO: support dynamic menus when 'menuItems' is a method name string (see extension spec) */
+        // Support for dynamic menus.
+        // If menuItems is a function, it is the function that should be called,
+        // when the menu is clicked.
+        var options = null;
         if (typeof menuItems === 'function') {
-            console.log('trying to build dynamic menu for extension');
-            console.log('setting to function: ' + menuName);
-                return this._buildDynamicMenuForScratchBlocks(menuName, menuItems, categoryInfo);
-            throw new Error(`Dynamic extension menus are not yet supported. Menu name: ${menuName}`);
-        }
-        const options = menuItems.map(item => {
-            switch (typeof item) {
-            case 'string':
-                return [item, item];
-            case 'object':
-                return [item.text, item.value];
-            default:
-                throw new Error(`Can't interpret menu item: ${item}`);
-            }
-        });
+            options = function () {
+                return menuItems();
+            }  
+        } else {
+            options = menuItems.map(item => {
+                switch (typeof item) {
+                case 'string':
+                    return [item, item];
+                case 'object':
+                    return [item.text, item.value];
+                default:
+                    throw new Error(`Can't interpret menu item: ${item}`);
+                }
+            });
+       }
 
         return {
             json: {
@@ -591,34 +593,6 @@ class Runtime extends EventEmitter {
         };
     }
 
-    
-    
-    _buildDynamicMenuForScratchBlocks(menuName, menuItems, categoryInfo) {
-      console.log('building dyanmic menu menuName: ' + menuName);
-      const menuId = this._makeExtensionMenuId(menuName, categoryInfo.id);
-      return {
-      json: {
-       message0: '%1',
-       type: menuId,
-            args0: [
-                {
-                    type: 'field_dropdown',
-                    name: menuName,
-                    options: function () {
-                        console.log('menu function');
-                        return menuItems();
-                    }  
-                }
-            ],
-            inputsInline: true,
-            output: 'String',
-            colour: categoryInfo.color1,
-            colourSecondary: categoryInfo.color2,
-            colourTertiary: categoryInfo.color3,
-            outputShape: ScratchBlocksConstants.OUTPUT_SHAPE_ROUND
-        }
-    };
- }
     /**
      * Convert BlockInfo into scratch-blocks JSON & XML, and generate a proxy function.
      * @param {BlockInfo} blockInfo - the block to convert
