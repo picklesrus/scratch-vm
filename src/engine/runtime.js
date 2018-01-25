@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const {OrderedMap} = require('immutable');
 const escapeHtml = require('escape-html');
+const dispatch = require('../dispatch/central-dispatch');
 
 const ArgumentType = require('../extension-support/argument-type');
 const Blocks = require('./blocks');
@@ -551,9 +552,11 @@ class Runtime extends EventEmitter {
      */
     _buildMenuForScratchBlocks (menuName, menuItems, categoryInfo) {
         const menuId = this._makeExtensionMenuId(menuName, categoryInfo.id);
-
         /** @TODO: support dynamic menus when 'menuItems' is a method name string (see extension spec) */
-        if (typeof menuItems === 'string') {
+        if (typeof menuItems === 'function') {
+            console.log('trying to build dynamic menu for extension');
+            console.log('setting to function: ' + menuName);
+                return this._buildDynamicMenuForScratchBlocks(menuName, menuItems, categoryInfo);
             throw new Error(`Dynamic extension menus are not yet supported. Menu name: ${menuName}`);
         }
         const options = menuItems.map(item => {
@@ -588,6 +591,34 @@ class Runtime extends EventEmitter {
         };
     }
 
+    
+    
+    _buildDynamicMenuForScratchBlocks(menuName, menuItems, categoryInfo) {
+      console.log('building dyanmic menu menuName: ' + menuName);
+      const menuId = this._makeExtensionMenuId(menuName, categoryInfo.id);
+      return {
+      json: {
+       message0: '%1',
+       type: menuId,
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: menuName,
+                    options: function () {
+                        console.log('menu function');
+                        return menuItems();
+                    }  
+                }
+            ],
+            inputsInline: true,
+            output: 'String',
+            colour: categoryInfo.color1,
+            colourSecondary: categoryInfo.color2,
+            colourTertiary: categoryInfo.color3,
+            outputShape: ScratchBlocksConstants.OUTPUT_SHAPE_ROUND
+        }
+    };
+ }
     /**
      * Convert BlockInfo into scratch-blocks JSON & XML, and generate a proxy function.
      * @param {BlockInfo} blockInfo - the block to convert

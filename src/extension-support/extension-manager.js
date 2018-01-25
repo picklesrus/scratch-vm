@@ -168,6 +168,7 @@ class ExtensionManager {
         });
     }
 
+
     /**
      * Called by an extension worker to indicate that the worker has finished initialization.
      * @param {int} id - the worker ID.
@@ -245,7 +246,31 @@ class ExtensionManager {
             }
             return result;
         }, []);
+        extensionInfo.menus = extensionInfo.menus || [];
+        for (const menuName in extensionInfo.menus) {
+            if (extensionInfo.menus.hasOwnProperty(menuName)) {
+                const menuItems = extensionInfo.menus[menuName];
+                if (typeof menuItems === 'string') {
+                    // B
+                    const serviceObject = dispatch.services[serviceName];
+                    const menuFunc = serviceObject[menuItems].bind(serviceObject);
+                    extensionInfo.menus[menuName] = menuFunc;
+                }
+            }
+        }
         return extensionInfo;
+    }
+
+
+    /**
+     * Apply defaults for optional block fields.
+     * @param {string} serviceName - the name of the service hosting this extension block
+     * @param {BlockInfo} menuInfo - the menu info from the extension
+     * @returns {MenuInfo} - a new menu info object which has values for all relevant optional fields.
+     * @private
+     */
+    _prepareMenuInfo (serviceName, menuInfo) {
+        return menuInfo;
     }
 
     /**
