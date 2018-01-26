@@ -247,30 +247,34 @@ class ExtensionManager {
             return result;
         }, []);
         extensionInfo.menus = extensionInfo.menus || [];
-        for (const menuName in extensionInfo.menus) {
-            if (extensionInfo.menus.hasOwnProperty(menuName)) {
-                const menuItems = extensionInfo.menus[menuName];
-                if (typeof menuItems === 'string') {
-                    // B
-                    const serviceObject = dispatch.services[serviceName];
-                    const menuFunc = serviceObject[menuItems].bind(serviceObject);
-                    extensionInfo.menus[menuName] = menuFunc;
-                }
-            }
-        }
+        extensionInfo.menus = this._prepareMenuInfo(serviceName, extensionInfo.menus);
         return extensionInfo;
     }
 
 
     /**
-     * Apply defaults for optional block fields.
+     * Prepare extension menus. e.g. setup binding for dynamic menu functions.
      * @param {string} serviceName - the name of the service hosting this extension block
-     * @param {BlockInfo} menuInfo - the menu info from the extension
-     * @returns {MenuInfo} - a new menu info object which has values for all relevant optional fields.
+     * @param {Array.<MenuInfo>} menuInfo - the menu info from the extension
+     * @returns {Array.<MenuInfo>} - a modfied menuInfo object which has values for all
+     *   relevant optional fields.
      * @private
      */
-    _prepareMenuInfo (serviceName, menuInfo) {
-        return menuInfo;
+    _prepareMenuInfo (serviceName, menus) {
+        var menuNames = Object.getOwnPropertyNames(menus);
+        for (let i = 0; i < menuNames.length; i++) {
+            var item = menuNames[i];
+            // If the value is a string, it should be a name of a function in the
+            // extension object that should be called to populate the menu whenever
+            // it is opened.  Set up the binding for the function object here so
+            // we can use it later when converting the menu for Scratch Blocks.
+            if (typeof menus[item] === 'string') {
+              const serviceObject = dispatch.services[serviceName];
+              const menuFunc = serviceObject[menus[item]].bind(serviceObject);
+              menus[item] = menuFunc;
+            }
+        }
+        return menus;
     }
 
     /**
