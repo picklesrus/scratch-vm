@@ -81,9 +81,10 @@ class Scratch3TranslateBlocks {
                 }
                 this.supportedLangauges =
                   body.data.languages.map((entry, index) => {
-		            const obj = {};
-            		obj.text = entry.language;
-            		obj.value = String(index + 1);
+		            // const obj = {};
+            		// obj.text = entry.language;
+            		// obj.value = String(index + 1);
+            		const obj = [entry.language, String(index + 1)];
             		return obj;
         		  });
         		resolve();
@@ -94,9 +95,9 @@ class Scratch3TranslateBlocks {
   	  console.log(' time to replace the menu');
 	  // TODO: replace this with a dynamic menu instead. this is a hack and probably
 	  // will break if you load the extension twice.
-	  var tempInfo = temp.getInfo();
-	  var prepared = temp.manager._prepareExtensionInfo('extension.0.translate', tempInfo);
-	  temp.runtime._refreshExtensionPrimitives(prepared);
+	  // var tempInfo = temp.getInfo();
+	  // var prepared = temp.manager._prepareExtensionInfo('extension.0.translate', tempInfo);
+	  // temp.runtime._refreshExtensionPrimitives(prepared);
 	});
    }
 
@@ -135,9 +136,15 @@ class Scratch3TranslateBlocks {
                 }
             ],
             menus: {
-               languages: this._buildLanguageMenu(),
+               languages: 'dynamicLanguageMenu',
             }
         };
+    }
+
+    dynamicLanguageMenu() {
+    	console.log('building menu!');
+    	var menu = this._buildLanguageMenu();
+    	return menu;
     }
 
     getTranslate(args) {
@@ -151,7 +158,7 @@ class Scratch3TranslateBlocks {
 		var urlBase = 'https://translation.googleapis.com/language/translate/v2?key=' + this.API_KEY;
 		var lang = 'en'; // TODO: Find a better default
 		if (args.LANGUAGE) {
-			var lang = this.supportedLangauges[args.LANGUAGE - 1].text;
+			var lang = this.supportedLangauges[args.LANGUAGE - 1][0];
 		}
 
 		var jsonReq = {
