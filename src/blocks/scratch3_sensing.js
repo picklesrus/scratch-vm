@@ -1,4 +1,5 @@
 const Cast = require('../util/cast');
+const Timer = require('../util/timer');
 
 class Scratch3SensingBlocks {
     constructor (runtime) {
@@ -13,6 +14,24 @@ class Scratch3SensingBlocks {
          * @type {string}
          */
         this._answer = '';
+
+        /**
+         * The timer utility.
+         * @type {Timer}
+         */
+        this._timer = new Timer();
+
+        /**
+         * The stored microphone loudness measurement.
+         * @type {number}
+         */
+        this._cachedLoudness = -1;
+
+        /**
+         * The time of the most recent microphone loudness measurement.
+         * @type {number}
+         */
+        this._cachedLoudnessTimestamp = 0;
 
         /**
          * The list of queued questions and respective `resolve` callbacks.
@@ -40,6 +59,7 @@ class Scratch3SensingBlocks {
             sensing_of: this.getAttributeOf,
             sensing_mousex: this.getMouseX,
             sensing_mousey: this.getMouseY,
+            sensing_setdragmode: this.setDragMode,
             sensing_mousedown: this.getMouseDown,
             sensing_keypressed: this.getKeyPressed,
             sensing_current: this.current,
@@ -55,7 +75,6 @@ class Scratch3SensingBlocks {
             sensing_answer: {},
             sensing_loudness: {},
             sensing_timer: {},
-            sensing_of: {},
             sensing_current: {}
         };
     }
@@ -119,8 +138,8 @@ class Scratch3SensingBlocks {
     touchingObject (args, util) {
         const requestedObject = args.TOUCHINGOBJECTMENU;
         if (requestedObject === '_mouse_') {
-            const mouseX = util.ioQuery('mouse', 'getX');
-            const mouseY = util.ioQuery('mouse', 'getY');
+            const mouseX = util.ioQuery('mouse', 'getClientX');
+            const mouseY = util.ioQuery('mouse', 'getClientY');
             return util.target.isTouchingPoint(mouseX, mouseY);
         } else if (requestedObject === '_edge_') {
             return util.target.isTouchingEdge();
@@ -146,8 +165,8 @@ class Scratch3SensingBlocks {
         let targetX = 0;
         let targetY = 0;
         if (args.DISTANCETOMENU === '_mouse_') {
-            targetX = util.ioQuery('mouse', 'getX');
-            targetY = util.ioQuery('mouse', 'getY');
+            targetX = util.ioQuery('mouse', 'getScratchX');
+            targetY = util.ioQuery('mouse', 'getScratchY');
         } else {
             const distTarget = this.runtime.getSpriteTargetByName(
                 args.DISTANCETOMENU
@@ -162,6 +181,10 @@ class Scratch3SensingBlocks {
         return Math.sqrt((dx * dx) + (dy * dy));
     }
 
+    setDragMode (args, util) {
+        util.target.setDraggable(args.DRAG_MODE === 'draggable');
+    }
+
     getTimer (args, util) {
         return util.ioQuery('clock', 'projectTimer');
     }
@@ -171,11 +194,11 @@ class Scratch3SensingBlocks {
     }
 
     getMouseX (args, util) {
-        return util.ioQuery('mouse', 'getX');
+        return util.ioQuery('mouse', 'getScratchX');
     }
 
     getMouseY (args, util) {
-        return util.ioQuery('mouse', 'getY');
+        return util.ioQuery('mouse', 'getScratchY');
     }
 
     getMouseDown (args, util) {
@@ -213,7 +236,17 @@ class Scratch3SensingBlocks {
 
     getLoudness () {
         if (typeof this.runtime.audioEngine === 'undefined') return -1;
-        return this.runtime.audioEngine.getLoudness();
+        if (this.runtime.currentStepTime === null) return -1;
+
+        // Only measure loudness once per step
+        const timeSinceLoudness = this._timer.time() - this._cachedLoudnessTimestamp;
+        if (timeSinceLoudness < this.runtime.currentStepTime) {
+            return this._cachedLoudness;
+        }
+
+        this._cachedLoudnessTimestamp = this._timer.time();
+        this._cachedLoudness = this.runtime.audioEngine.getLoudness();
+        return this._cachedLoudness;
     }
 
     getAttributeOf (args) {

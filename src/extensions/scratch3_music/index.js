@@ -60,6 +60,15 @@ class Scratch3MusicBlocks {
          */
         this._instrumentBufferArrays = [];
 
+        /**
+         * An array of audio bufferSourceNodes. Each time you play an instrument or drum sound,
+         * a bufferSourceNode is created. We keep references to them to make sure their onended
+         * events can fire.
+         * @type {Array}
+         * @private
+         */
+        this._bufferSources = [];
+
         this._loadAllSounds();
     }
 
@@ -97,10 +106,23 @@ class Scratch3MusicBlocks {
     _loadSound (fileName, index, bufferArray) {
         if (!this.runtime.storage) return;
         if (!this.runtime.audioEngine) return;
+        if (!this.runtime.audioEngine.audioContext) return;
         return this.runtime.storage.load(this.runtime.storage.AssetType.Sound, fileName, 'mp3')
-            .then(soundAsset =>
-                this.runtime.audioEngine.audioContext.decodeAudioData(soundAsset.data.buffer)
-            )
+            .then(soundAsset => {
+                const context = this.runtime.audioEngine.audioContext;
+                // Check for newer promise-based API
+                if (context.decodeAudioData.length === 1) {
+                    return context.decodeAudioData(soundAsset.data.buffer);
+                } else { // eslint-disable-line no-else-return
+                    // Fall back to callback API
+                    return new Promise((resolve, reject) =>
+                        context.decodeAudioData(soundAsset.data.buffer,
+                            buffer => resolve(buffer),
+                            error => reject(error)
+                        )
+                    );
+                }
+            })
             .then(buffer => {
                 bufferArray[index] = buffer;
             });
@@ -542,9 +564,14 @@ class Scratch3MusicBlocks {
         bufferSource.buffer = this._drumBuffers[drumNum];
         bufferSource.connect(outputNode);
         bufferSource.start();
+
+        const bufferSourceIndex = this._bufferSources.length;
+        this._bufferSources.push(bufferSource);
+
         this._concurrencyCounter++;
         bufferSource.onended = () => {
             this._concurrencyCounter--;
+            delete this._bufferSources[bufferSourceIndex];
         };
     }
 
@@ -625,6 +652,10 @@ class Scratch3MusicBlocks {
         // Create the audio buffer to play the note, and set its pitch
         const context = util.runtime.audioEngine.audioContext;
         const bufferSource = context.createBufferSource();
+
+        const bufferSourceIndex = this._bufferSources.length;
+        this._bufferSources.push(bufferSource);
+
         bufferSource.buffer = this._instrumentBufferArrays[inst][sampleIndex];
         const sampleNote = sampleArray[sampleIndex];
         bufferSource.playbackRate.value = this._ratioForPitchInterval(note - sampleNote);
@@ -654,6 +685,7 @@ class Scratch3MusicBlocks {
         this._concurrencyCounter++;
         bufferSource.onended = () => {
             this._concurrencyCounter--;
+            delete this._bufferSources[bufferSourceIndex];
         };
     }
 
