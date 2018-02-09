@@ -67,6 +67,10 @@ module.exports = [
             new CopyWebpackPlugin([{
                 from: './src/extensions/scratch3_music/assets',
                 to: 'assets/scratch3_music'
+            },
+            {
+                from: './src/extensions/scratch3_speech/assets',
+                to: 'assets/scratch3_speech'
             }])
         ])
     }),

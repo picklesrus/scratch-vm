@@ -53,6 +53,12 @@ class Scratch3SpeechBlocks {
         // A Promise whose fulfillment handler receives a MediaStream object when the microphone has been obtained.
         this._audioPromise = null;
 
+        // Audio buffers for sounds to indicate that listending has started and ended.
+        this._startSoundBuffer = null;
+        this._endSoundBuffer = null;
+
+        this._loadUISounds();
+
         // Come back and figure out which of these I really need.
         this.startRecording = this.startRecording.bind(this);
         this._newWebsocket = this._newWebsocket.bind(this);
@@ -69,6 +75,45 @@ class Scratch3SpeechBlocks {
 
         this.runtime.on('TRANSCRIPTION', this._onTranscription.bind(this));
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
+    }
+
+    /**
+     * Download and decode the UI sounds.
+     */
+    _loadUISounds () {
+        this._loadSound('speech-rec-start').then(buffer => {
+            this._startSoundBuffer = buffer;
+        });
+        this._loadSound('speech-rec-end').then(buffer => {
+            this._endSoundBuffer = buffer;
+        });
+    }
+
+    /**
+     * Download and decode a sound.
+     * @param {string} fileName - the audio file name.
+     * @return {Promise} - a promise which will resolve once the sound has loaded.
+     */
+    _loadSound (fileName) {
+        if (!this.runtime.storage) return;
+        if (!this.runtime.audioEngine) return;
+        if (!this.runtime.audioEngine.audioContext) return;
+        return this.runtime.storage.load(this.runtime.storage.AssetType.Sound, fileName, 'mp3')
+            .then(soundAsset => {
+                const context = this.runtime.audioEngine.audioContext;
+                // Check for newer promise-based API
+                if (context.decodeAudioData.length === 1) {
+                    return context.decodeAudioData(soundAsset.data.buffer);
+                } else { // eslint-disable-line no-else-return
+                    // Fall back to callback API
+                    return new Promise((resolve, reject) =>
+                        context.decodeAudioData(soundAsset.data.buffer,
+                            buffer => resolve(buffer),
+                            error => reject(error)
+                        )
+                    );
+                }
+            });
     }
 
 	/**
@@ -222,6 +267,7 @@ class Scratch3SpeechBlocks {
 	  	  var resFn = this._speechList[i];
 	  	  resFn();
    	  }
+      this._playSound(this._endSoundBuffer);
    	  // Pause the mic and close the web socket.
    	  this._context.suspend.bind(this._context);
    	  this._closeWebsocket();
@@ -390,6 +436,7 @@ class Scratch3SpeechBlocks {
 	}
 
 	whenIHear(args) {
+      this._playSound(this._startSoundBuffer);
       //this.startRecording();
       var speechPromise = new Promise(resolve => {
       	 var input = 'placeholder for a thing I probably do not need';
@@ -401,6 +448,15 @@ class Scratch3SpeechBlocks {
          }
       });
       return speechPromise;
+    }
+
+    _playSound(buffer) {
+        if (this.runtime.audioEngine === null) return;
+        const context = this.runtime.audioEngine.audioContext;
+        const bufferSource = context.createBufferSource();
+        bufferSource.buffer = buffer;
+        bufferSource.connect(this.runtime.audioEngine.input);
+        bufferSource.start();
     }
 
 
