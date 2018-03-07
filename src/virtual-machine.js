@@ -1,3 +1,4 @@
+const TextEncoder = require('text-encoding').TextEncoder;
 const EventEmitter = require('events');
 
 const centralDispatch = require('./dispatch/central-dispatch');
@@ -8,6 +9,9 @@ const sb2 = require('./serialization/sb2');
 const sb3 = require('./serialization/sb3');
 const StringUtil = require('./util/string-util');
 const formatMessage = require('format-message');
+const validate = require('scratch-parser');
+
+const Variable = require('./engine/variable');
 
 const {loadCostume} = require('./import/load-costume.js');
 const {loadSound} = require('./import/load-sound.js');
@@ -71,6 +75,12 @@ class VirtualMachine extends EventEmitter {
         });
         this.runtime.on(Runtime.MONITORS_UPDATE, monitorList => {
             this.emit(Runtime.MONITORS_UPDATE, monitorList);
+        });
+        this.runtime.on(Runtime.BLOCK_DRAG_UPDATE, areBlocksOverGui => {
+            this.emit(Runtime.BLOCK_DRAG_UPDATE, areBlocksOverGui);
+        });
+        this.runtime.on(Runtime.BLOCK_DRAG_END, blocks => {
+            this.emit(Runtime.BLOCK_DRAG_END, blocks);
         });
         this.runtime.on(Runtime.EXTENSION_ADDED, blocksInfo => {
             this.emit(Runtime.EXTENSION_ADDED, blocksInfo);
@@ -218,12 +228,8 @@ class VirtualMachine extends EventEmitter {
 
         // Validate & parse
         if (typeof json !== 'string' && typeof json !== 'object') {
-            log.error('Failed to parse project. Invalid type supplied to fromJSON.');
-            return;
+            throw new Error('Failed to parse project. Invalid type supplied to fromJSON.');
         }
-
-        // Attempt to parse JSON if string is supplied
-        if (typeof json === 'string') json = JSON.parse(json);
 
         // Establish version, deserialize, and load into runtime
         // @todo Support Scratch 1.4
@@ -231,13 +237,27 @@ class VirtualMachine extends EventEmitter {
         //       See `scratch-parser` for a more sophisticated validation
         //       methodology that should be adapted for use here
         let deserializer;
-        if ((typeof json.meta !== 'undefined') && (typeof json.meta.semver !== 'undefined')) {
+        let validatedProject;
+        const possibleSb3 = typeof json === 'string' ? JSON.parse(json) : json;
+        if ((typeof possibleSb3.meta !== 'undefined') && (typeof possibleSb3.meta.semver !== 'undefined')) {
             deserializer = sb3;
+            validatedProject = possibleSb3;
         } else {
-            deserializer = sb2;
+            // scratch-parser expects a json string or a buffer
+            const possibleSb2 = typeof json === 'object' ? JSON.stringify(json) : json;
+            validate(possibleSb2, (err, project) => {
+                if (err) {
+                    throw new Error(
+                        `The given project could not be validated, parsing failed with error: ${JSON.stringify(err)}`);
+
+                } else {
+                    deserializer = sb2;
+                    validatedProject = project;
+                }
+            });
         }
 
-        return deserializer.deserialize(json, this.runtime)
+        return deserializer.deserialize(validatedProject, this.runtime)
             .then(({targets, extensions}) =>
                 this.installTargets(targets, extensions, true));
     }
@@ -267,6 +287,8 @@ class VirtualMachine extends EventEmitter {
             targets.forEach(target => {
                 this.runtime.targets.push(target);
                 (/** @type RenderedTarget */ target).updateAllDrawableProperties();
+                // Ensure unique sprite name
+                if (target.isSprite()) this.renameSprite(target.id, target.getName());
             });
             // Select the first target for editing, e.g., the first sprite.
             if (wholeProject && (targets.length > 1)) {
@@ -318,8 +340,38 @@ class VirtualMachine extends EventEmitter {
         return loadCostume(md5ext, costumeObject, this.runtime).then(() => {
             this.editingTarget.addCostume(costumeObject);
             this.editingTarget.setCostume(
-                this.editingTarget.sprite.costumes.length - 1
+                this.editingTarget.getCostumes().length - 1
             );
+        });
+    }
+
+    /**
+     * Duplicate the costume at the given index. Add it at that index + 1.
+     * @param {!int} costumeIndex Index of costume to duplicate
+     * @returns {?Promise} - a promise that resolves when the costume has been decoded and added
+     */
+    duplicateCostume (costumeIndex) {
+        const originalCostume = this.editingTarget.getCostumes()[costumeIndex];
+        const clone = Object.assign({}, originalCostume);
+        const md5ext = `${clone.assetId}.${clone.dataFormat}`;
+        return loadCostume(md5ext, clone, this.runtime).then(() => {
+            this.editingTarget.addCostume(clone, costumeIndex + 1);
+            this.editingTarget.setCostume(costumeIndex + 1);
+            this.emitTargetsUpdate();
+        });
+    }
+
+    /**
+     * Duplicate the sound at the given index. Add it at that index + 1.
+     * @param {!int} soundIndex Index of sound to duplicate
+     * @returns {?Promise} - a promise that resolves when the sound has been decoded and added
+     */
+    duplicateSound (soundIndex) {
+        const originalSound = this.editingTarget.getSounds()[soundIndex];
+        const clone = Object.assign({}, originalSound);
+        return loadSound(clone, this.runtime).then(() => {
+            this.editingTarget.addSound(clone, soundIndex + 1);
+            this.emitTargetsUpdate();
         });
     }
 
@@ -380,12 +432,34 @@ class VirtualMachine extends EventEmitter {
      * Update a sound buffer.
      * @param {int} soundIndex - the index of the sound to be updated.
      * @param {AudioBuffer} newBuffer - new audio buffer for the audio engine.
+     * @param {ArrayBuffer} soundEncoding - the new (wav) encoded sound to be stored
      */
-    updateSoundBuffer (soundIndex, newBuffer) {
-        const id = this.editingTarget.sprite.sounds[soundIndex].soundId;
+    updateSoundBuffer (soundIndex, newBuffer, soundEncoding) {
+        const sound = this.editingTarget.sprite.sounds[soundIndex];
+        const id = sound ? sound.soundId : null;
         if (id && this.runtime && this.runtime.audioEngine) {
             this.runtime.audioEngine.updateSoundBuffer(id, newBuffer);
         }
+        // Update sound in runtime
+        if (soundEncoding) {
+            // Now that we updated the sound, the format should also be updated
+            // so that the sound can eventually be decoded the right way.
+            // Sounds that were formerly 'adpcm', but were updated in sound editor
+            // will not get decoded by the audio engine correctly unless the format
+            // is updated as below.
+            sound.format = '';
+            const storage = this.runtime.storage;
+            sound.assetId = storage.builtinHelper.cache(
+                storage.AssetType.Sound,
+                storage.DataFormat.WAV,
+                soundEncoding
+            );
+            sound.md5 = `${sound.assetId}.${sound.dataFormat}`;
+        }
+        // If soundEncoding is null, it's because gui had a problem
+        // encoding the updated sound. We don't want to store anything in this
+        // case, and gui should have logged an error.
+
         this.emitTargetsUpdate();
     }
 
@@ -403,7 +477,7 @@ class VirtualMachine extends EventEmitter {
      * @return {string} the costume's SVG string, or null if it's not an SVG costume.
      */
     getCostumeSvg (costumeIndex) {
-        const id = this.editingTarget.sprite.costumes[costumeIndex].assetId;
+        const id = this.editingTarget.getCostumes()[costumeIndex].assetId;
         if (id && this.runtime && this.runtime.storage &&
                 this.runtime.storage.get(id).dataFormat === 'svg') {
             return this.runtime.storage.get(id).decodeText();
@@ -419,7 +493,7 @@ class VirtualMachine extends EventEmitter {
      * @param {number} rotationCenterY y of point about which the costume rotates, relative to its upper left corner
      */
     updateSvg (costumeIndex, svg, rotationCenterX, rotationCenterY) {
-        const costume = this.editingTarget.sprite.costumes[costumeIndex];
+        const costume = this.editingTarget.getCostumes()[costumeIndex];
         if (costume && this.runtime && this.runtime.renderer) {
             costume.rotationCenterX = rotationCenterX;
             costume.rotationCenterY = rotationCenterY;
@@ -447,8 +521,8 @@ class VirtualMachine extends EventEmitter {
     addBackdrop (md5ext, backdropObject) {
         return loadCostume(md5ext, backdropObject, this.runtime).then(() => {
             const stage = this.runtime.getTargetForStage();
-            stage.sprite.costumes.push(backdropObject);
-            stage.setCostume(stage.sprite.costumes.length - 1);
+            stage.addCostume(backdropObject);
+            stage.setCostume(stage.getCostumes().length - 1);
         });
     }
 
@@ -471,7 +545,14 @@ class VirtualMachine extends EventEmitter {
                 const names = this.runtime.targets
                     .filter(runtimeTarget => runtimeTarget.isSprite() && runtimeTarget.id !== target.id)
                     .map(runtimeTarget => runtimeTarget.sprite.name);
-                sprite.name = StringUtil.unusedName(newName, names);
+                const oldName = sprite.name;
+                const newUnusedName = StringUtil.unusedName(newName, names);
+                sprite.name = newUnusedName;
+                const allTargets = this.runtime.targets;
+                for (let i = 0; i < allTargets.length; i++) {
+                    const currTarget = allTargets[i];
+                    currTarget.blocks.updateAssetName(oldName, newName, 'sprite');
+                }
             }
             this.emitTargetsUpdate();
         } else {
@@ -628,7 +709,7 @@ class VirtualMachine extends EventEmitter {
      */
     setEditingTarget (targetId) {
         // Has the target id changed? If not, exit.
-        if (targetId === this.editingTarget.id) {
+        if (this.editingTarget && targetId === this.editingTarget.id) {
             return;
         }
         const target = this.runtime.getTargetById(targetId);
@@ -638,6 +719,19 @@ class VirtualMachine extends EventEmitter {
             this.emitTargetsUpdate();
             this.emitWorkspaceUpdate();
             this.runtime.setEditingTarget(target);
+        }
+    }
+
+    /**
+     * Called when blocks are dragged from one sprite to another. Adds the blocks to the
+     * workspace of the given target.
+     * @param {!Array<object>} blocks Blocks to add.
+     * @param {!string} targetId Id of target to add blocks to.
+     */
+    shareBlocksToTarget (blocks, targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        for (let i = 0; i < blocks.length; i++) {
+            target.blocks.createBlock(blocks[i]);
         }
     }
 
@@ -677,6 +771,35 @@ class VirtualMachine extends EventEmitter {
      * of the current editing target's blocks.
      */
     emitWorkspaceUpdate () {
+        // Create a list of broadcast message Ids according to the stage variables
+        const stageVariables = this.runtime.getTargetForStage().variables;
+        let messageIds = [];
+        for (const varId in stageVariables) {
+            if (stageVariables[varId].type === Variable.BROADCAST_MESSAGE_TYPE) {
+                messageIds.push(varId);
+            }
+        }
+        // Go through all blocks on all targets, removing referenced
+        // broadcast ids from the list.
+        for (let i = 0; i < this.runtime.targets.length; i++) {
+            const currTarget = this.runtime.targets[i];
+            const currBlocks = currTarget.blocks._blocks;
+            for (const blockId in currBlocks) {
+                if (currBlocks[blockId].fields.BROADCAST_OPTION) {
+                    const id = currBlocks[blockId].fields.BROADCAST_OPTION.id;
+                    const index = messageIds.indexOf(id);
+                    if (index !== -1) {
+                        messageIds = messageIds.slice(0, index)
+                            .concat(messageIds.slice(index + 1));
+                    }
+                }
+            }
+        }
+        // Anything left in messageIds is not referenced by a block, so delete it.
+        for (let i = 0; i < messageIds.length; i++) {
+            const id = messageIds[i];
+            delete this.runtime.getTargetForStage().variables[id];
+        }
         const variableMap = Object.assign({},
             this.runtime.getTargetForStage().variables,
             this.editingTarget.variables

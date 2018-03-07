@@ -233,27 +233,30 @@ class Scratch3LooksBlocks {
             looks_cleargraphiceffects: this.clearEffects,
             looks_changesizeby: this.changeSize,
             looks_setsizeto: this.setSize,
-            looks_gotofront: this.goToFront,
-            looks_gobacklayers: this.goBackLayers,
+            looks_gotofrontback: this.goToFrontBack,
+            looks_goforwardbackwardlayers: this.goForwardBackwardLayers,
             looks_size: this.getSize,
-            looks_costumeorder: this.getCostumeIndex,
-            looks_backdroporder: this.getBackdropIndex,
-            looks_backdropname: this.getBackdropName
+            looks_costumenumbername: this.getCostumeNumberName,
+            looks_backdropnumbername: this.getBackdropNumberName
         };
     }
 
     getMonitored () {
         return {
             looks_size: {isSpriteSpecific: true},
-            looks_costumeorder: {isSpriteSpecific: true},
-            looks_backdroporder: {},
-            looks_backdropname: {}
+            looks_costumenumbername: {isSpriteSpecific: true},
+            looks_backdropnumbername: {}
         };
     }
 
     say (args, util) {
         // @TODO in 2.0 calling say/think resets the right/left bias of the bubble
-        this._updateBubble(util.target, 'say', String(args.MESSAGE));
+        let message = args.MESSAGE;
+        if (typeof message === 'number') {
+            message = message.toFixed(2);
+        }
+        message = String(message);
+        this.runtime.emit('SAY', util.target, 'say', message);
     }
 
     sayforsecs (args, util) {
@@ -329,7 +332,7 @@ class Scratch3LooksBlocks {
         }
         if (target === this.runtime.getTargetForStage()) {
             // Target is the stage - start hats.
-            const newName = target.sprite.costumes[target.currentCostume].name;
+            const newName = target.getCostumes()[target.currentCostume].name;
             return this.runtime.startHats('event_whenbackdropswitchesto', {
                 BACKDROP: newName
             });
@@ -409,32 +412,45 @@ class Scratch3LooksBlocks {
         util.target.setSize(size);
     }
 
-    goToFront (args, util) {
+    goToFrontBack (args, util) {
         if (!util.target.isStage) {
-            util.target.goToFront();
+            if (args.FRONT_BACK === 'front') {
+                util.target.goToFront();
+            } else {
+                util.target.goToBack();
+            }
         }
     }
 
-    goBackLayers (args, util) {
-        util.target.goBackLayers(args.NUM);
+    goForwardBackwardLayers (args, util) {
+        if (!util.target.isStage) {
+            if (args.FORWARD_BACKWARD === 'forward') {
+                util.target.goForwardLayers(Cast.toNumber(args.NUM));
+            } else {
+                util.target.goBackwardLayers(Cast.toNumber(args.NUM));
+            }
+        }
     }
 
     getSize (args, util) {
         return Math.round(util.target.size);
     }
 
-    getBackdropIndex () {
+    getBackdropNumberName (args) {
         const stage = this.runtime.getTargetForStage();
-        return stage.currentCostume + 1;
+        if (args.NUMBER_NAME === 'number') {
+            return stage.currentCostume + 1;
+        }
+        // Else return name
+        return stage.getCostumes()[stage.currentCostume].name;
     }
 
-    getBackdropName () {
-        const stage = this.runtime.getTargetForStage();
-        return stage.sprite.costumes[stage.currentCostume].name;
-    }
-
-    getCostumeIndex (args, util) {
-        return util.target.currentCostume + 1;
+    getCostumeNumberName (args, util) {
+        if (args.NUMBER_NAME === 'number') {
+            return util.target.currentCostume + 1;
+        }
+        // Else return name
+        return util.target.getCostumes()[util.target.currentCostume].name;
     }
 }
 
