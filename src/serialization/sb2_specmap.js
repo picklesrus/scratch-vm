@@ -345,12 +345,12 @@ const specMap = {
         ]
     },
     'comeToFront': {
-        opcode: 'looks_gotofrontback',
+        opcode: 'looks_gotofront',
         argMap: [
         ]
     },
     'goBackByLayers:': {
-        opcode: 'looks_goforwardbackwardlayers',
+        opcode: 'looks_gobacklayers',
         argMap: [
             {
                 type: 'input',
@@ -360,12 +360,12 @@ const specMap = {
         ]
     },
     'costumeIndex': {
-        opcode: 'looks_costumenumbername',
+        opcode: 'looks_costumeorder',
         argMap: [
         ]
     },
     'sceneName': {
-        opcode: 'looks_backdropnumbername',
+        opcode: 'looks_backdropname',
         argMap: [
         ]
     },
@@ -390,7 +390,7 @@ const specMap = {
         ]
     },
     'backgroundIndex': {
-        opcode: 'looks_backdropnumbername',
+        opcode: 'looks_backdroporder',
         argMap: [
         ]
     },
@@ -424,7 +424,7 @@ const specMap = {
         argMap: [
             {
                 type: 'input',
-                inputOp: 'music.menu.DRUM',
+                inputOp: 'math_number',
                 inputName: 'DRUM'
             },
             {
@@ -464,7 +464,7 @@ const specMap = {
         argMap: [
             {
                 type: 'input',
-                inputOp: 'music.menu.INSTRUMENT',
+                inputOp: 'math_number',
                 inputName: 'INSTRUMENT'
             }
         ]
@@ -665,9 +665,8 @@ const specMap = {
         opcode: 'event_broadcast',
         argMap: [
             {
-                type: 'input',
-                inputOp: 'event_broadcast_menu',
-                inputName: 'BROADCAST_INPUT',
+                type: 'field',
+                fieldName: 'BROADCAST_OPTION',
                 variableType: Variable.BROADCAST_MESSAGE_TYPE
             }
         ]
@@ -676,9 +675,8 @@ const specMap = {
         opcode: 'event_broadcastandwait',
         argMap: [
             {
-                type: 'input',
-                inputOp: 'event_broadcast_menu',
-                inputName: 'BROADCAST_INPUT',
+                type: 'field',
+                fieldName: 'BROADCAST_OPTION',
                 variableType: Variable.BROADCAST_MESSAGE_TYPE
             }
         ]
@@ -861,8 +859,9 @@ const specMap = {
         opcode: 'sensing_keypressed',
         argMap: [
             {
-                type: 'field',
-                fieldName: 'KEY_OPTION'
+                type: 'input',
+                inputOp: 'sensing_keyoptions',
+                inputName: 'KEY_OPTION'
             }
         ]
     },
@@ -935,8 +934,9 @@ const specMap = {
         opcode: 'sensing_of',
         argMap: [
             {
-                type: 'field',
-                fieldName: 'PROPERTY'
+                type: 'input',
+                inputOp: 'sensing_of_property_menu',
+                inputName: 'PROPERTY'
             },
             {
                 type: 'input',

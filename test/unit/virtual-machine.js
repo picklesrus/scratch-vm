@@ -78,34 +78,36 @@ test('renameSprite does not set sprite names to reserved names', t => {
 test('renameSprite increments from existing sprite names', t => {
     const vm = new VirtualMachine();
     vm.emitTargetsUpdate = () => {};
-
-    const spr1 = new Sprite(null, vm.runtime);
-    const target1 = spr1.createClone();
-    const spr2 = new Sprite(null, vm.runtime);
-    const target2 = spr2.createClone();
-
-    vm.runtime.targets = [target1, target2];
-    vm.renameSprite(target1.id, 'foo');
-    t.equal(vm.runtime.targets[0].sprite.name, 'foo');
-    vm.renameSprite(target2.id, 'foo');
-    t.equal(vm.runtime.targets[1].sprite.name, 'foo2');
+    vm.runtime.targets = [{
+        id: 'id1',
+        isSprite: () => true,
+        sprite: {
+            name: 'this name'
+        }
+    }, {
+        id: 'id2',
+        isSprite: () => true,
+        sprite: {
+            name: 'that name'
+        }
+    }];
+    vm.renameSprite('id1', 'that name');
+    t.equal(vm.runtime.targets[0].sprite.name, 'that name2');
     t.end();
 });
 
 test('renameSprite does not increment when renaming to the same name', t => {
     const vm = new VirtualMachine();
     vm.emitTargetsUpdate = () => {};
-
-    const spr = new Sprite(null, vm.runtime);
-    spr.name = 'foo';
-    const target = spr.createClone();
-
-    vm.runtime.targets = [target];
-
-    t.equal(vm.runtime.targets[0].sprite.name, 'foo');
-    vm.renameSprite(target.id, 'foo');
-    t.equal(vm.runtime.targets[0].sprite.name, 'foo');
-
+    vm.runtime.targets = [{
+        id: 'id1',
+        isSprite: () => true,
+        sprite: {
+            name: 'this name'
+        }
+    }];
+    vm.renameSprite('id1', 'this name');
+    t.equal(vm.runtime.targets[0].sprite.name, 'this name');
     t.end();
 });
 
@@ -276,26 +278,6 @@ test('duplicateSprite duplicates a sprite when given id is associated with known
 
 });
 
-test('duplicateSprite assigns duplicated sprite a fresh name', t => {
-    const vm = new VirtualMachine();
-    const spr = new Sprite(null, vm.runtime);
-    spr.name = 'sprite1';
-    const currTarget = spr.createClone();
-    vm.editingTarget = currTarget;
-
-    vm.emitWorkspaceUpdate = () => null;
-
-    vm.runtime.targets = [currTarget];
-    t.equal(vm.runtime.targets.length, 1);
-    vm.duplicateSprite(currTarget.id).then(() => {
-        t.equal(vm.runtime.targets.length, 2);
-        t.equal(vm.runtime.targets[0].sprite.name, 'sprite1');
-        t.equal(vm.runtime.targets[1].sprite.name, 'sprite2');
-        t.end();
-    });
-
-});
-
 test('emitWorkspaceUpdate', t => {
     const vm = new VirtualMachine();
     vm.runtime.targets = [
@@ -305,18 +287,12 @@ test('emitWorkspaceUpdate', t => {
                 global: {
                     toXML: () => 'global'
                 }
-            },
-            blocks: {
-                toXML: () => 'blocks'
             }
         }, {
             variables: {
                 unused: {
                     toXML: () => 'unused'
                 }
-            },
-            blocks: {
-                toXML: () => 'blocks'
             }
         }, {
             variables: {

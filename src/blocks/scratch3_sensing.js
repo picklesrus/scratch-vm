@@ -40,7 +40,6 @@ class Scratch3SensingBlocks {
             sensing_of: this.getAttributeOf,
             sensing_mousex: this.getMouseX,
             sensing_mousey: this.getMouseY,
-            sensing_setdragmode: this.setDragMode,
             sensing_mousedown: this.getMouseDown,
             sensing_keypressed: this.getKeyPressed,
             sensing_current: this.current,
@@ -56,6 +55,7 @@ class Scratch3SensingBlocks {
             sensing_answer: {},
             sensing_loudness: {},
             sensing_timer: {},
+            sensing_of: {},
             sensing_current: {}
         };
     }
@@ -119,8 +119,8 @@ class Scratch3SensingBlocks {
     touchingObject (args, util) {
         const requestedObject = args.TOUCHINGOBJECTMENU;
         if (requestedObject === '_mouse_') {
-            const mouseX = util.ioQuery('mouse', 'getClientX');
-            const mouseY = util.ioQuery('mouse', 'getClientY');
+            const mouseX = util.ioQuery('mouse', 'getX');
+            const mouseY = util.ioQuery('mouse', 'getY');
             return util.target.isTouchingPoint(mouseX, mouseY);
         } else if (requestedObject === '_edge_') {
             return util.target.isTouchingEdge();
@@ -146,8 +146,8 @@ class Scratch3SensingBlocks {
         let targetX = 0;
         let targetY = 0;
         if (args.DISTANCETOMENU === '_mouse_') {
-            targetX = util.ioQuery('mouse', 'getScratchX');
-            targetY = util.ioQuery('mouse', 'getScratchY');
+            targetX = util.ioQuery('mouse', 'getX');
+            targetY = util.ioQuery('mouse', 'getY');
         } else {
             const distTarget = this.runtime.getSpriteTargetByName(
                 args.DISTANCETOMENU
@@ -162,10 +162,6 @@ class Scratch3SensingBlocks {
         return Math.sqrt((dx * dx) + (dy * dy));
     }
 
-    setDragMode (args, util) {
-        util.target.setDraggable(args.DRAG_MODE === 'draggable');
-    }
-
     getTimer (args, util) {
         return util.ioQuery('clock', 'projectTimer');
     }
@@ -175,11 +171,11 @@ class Scratch3SensingBlocks {
     }
 
     getMouseX (args, util) {
-        return util.ioQuery('mouse', 'getScratchX');
+        return util.ioQuery('mouse', 'getX');
     }
 
     getMouseY (args, util) {
-        return util.ioQuery('mouse', 'getScratchY');
+        return util.ioQuery('mouse', 'getY');
     }
 
     getMouseDown (args, util) {
@@ -237,7 +233,7 @@ class Scratch3SensingBlocks {
 
             case 'backdrop #': return attrTarget.currentCostume + 1;
             case 'backdrop name':
-                return attrTarget.getCostumes()[attrTarget.currentCostume].name;
+                return attrTarget.sprite.costumes[attrTarget.currentCostume].name;
             case 'volume': return; // @todo: Keep this in mind for sound blocks!
             }
         } else {
@@ -247,7 +243,7 @@ class Scratch3SensingBlocks {
             case 'direction': return attrTarget.direction;
             case 'costume #': return attrTarget.currentCostume + 1;
             case 'costume name':
-                return attrTarget.getCostumes()[attrTarget.currentCostume].name;
+                return attrTarget.sprite.costumes[attrTarget.currentCostume].name;
             case 'size': return attrTarget.size;
             case 'volume': return; // @todo: above, keep in mind for sound blocks..
             }

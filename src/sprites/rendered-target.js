@@ -116,12 +116,6 @@ class RenderedTarget extends Target {
          * @type {!string}
          */
         this.rotationStyle = RenderedTarget.ROTATION_STYLE_ALL_AROUND;
-
-        /**
-         * Current tempo (used by the music extension)
-         * @type {number}
-         */
-        this.tempo = 60;
     }
 
     /**
@@ -137,15 +131,17 @@ class RenderedTarget extends Target {
                 'control_start_as_clone', null, this
             );
         }
-    }
 
-    /**
-     * Initialize the audio player for this sprite or clone.
-     */
-    initAudio () {
+        /**
+        * Audio player
+        */
         this.audioPlayer = null;
         if (this.runtime && this.runtime.audioEngine) {
-            this.audioPlayer = this.runtime.audioEngine.createPlayer();
+            if (this.isOriginal) {
+                this.audioPlayer = this.runtime.audioEngine.createPlayer();
+            } else {
+                this.audioPlayer = this.sprite.clones[0].audioPlayer;
+            }
         }
     }
 
@@ -207,7 +203,7 @@ class RenderedTarget extends Target {
             this.x = x;
             this.y = y;
         }
-        this.emit(RenderedTarget.EVENT_TARGET_MOVED, this, oldX, oldY, force);
+        this.emit(RenderedTarget.EVENT_TARGET_MOVED, this, oldX, oldY);
         this.runtime.requestTargetsUpdate(this);
     }
 
@@ -333,7 +329,6 @@ class RenderedTarget extends Target {
                 this.runtime.requestRedraw();
             }
         }
-        this.runtime.requestTargetsUpdate(this);
     }
 
     /**
@@ -381,7 +376,7 @@ class RenderedTarget extends Target {
             index, 0, this.sprite.costumes.length - 1
         );
         if (this.renderer) {
-            const costume = this.getCostumes()[this.currentCostume];
+            const costume = this.sprite.costumes[this.currentCostume];
             const drawableProperties = {
                 skinId: costume.skinId,
                 costumeResolution: costume.bitmapResolution
@@ -407,14 +402,11 @@ class RenderedTarget extends Target {
     /**
      * Add a costume, taking care to avoid duplicate names.
      * @param {!object} costumeObject Object representing the costume.
-     * @param {?int} index Index at which to add costume
      */
-    addCostume (costumeObject, index) {
-        if (index) {
-            this.sprite.addCostumeAt(costumeObject, index);
-        } else {
-            this.sprite.addCostumeAt(costumeObject, this.sprite.costumes.length);
-        }
+    addCostume (costumeObject) {
+        const usedNames = this.sprite.costumes.map(costume => costume.name);
+        costumeObject.name = StringUtil.unusedName(costumeObject.name, usedNames);
+        this.sprite.costumes.push(costumeObject);
     }
 
     /**
@@ -426,22 +418,7 @@ class RenderedTarget extends Target {
         const usedNames = this.sprite.costumes
             .filter((costume, index) => costumeIndex !== index)
             .map(costume => costume.name);
-        const oldName = this.getCostumes()[costumeIndex].name;
-        const newUnusedName = StringUtil.unusedName(newName, usedNames);
-        this.getCostumes()[costumeIndex].name = newUnusedName;
-
-        if (this.isStage) {
-            // Since this is a backdrop, go through all targets and
-            // update any blocks referencing the old backdrop name
-            const targets = this.runtime.targets;
-            for (let i = 0; i < targets.length; i++) {
-                const currTarget = targets[i];
-                currTarget.blocks.updateAssetName(oldName, newUnusedName, 'backdrop');
-            }
-        } else {
-            this.blocks.updateAssetName(oldName, newUnusedName, 'costume');
-        }
-
+        this.sprite.costumes[costumeIndex].name = StringUtil.unusedName(newName, usedNames);
     }
 
     /**
@@ -452,7 +429,9 @@ class RenderedTarget extends Target {
         const originalCostumeCount = this.sprite.costumes.length;
         if (originalCostumeCount === 1) return;
 
-        this.sprite.deleteCostumeAt(index);
+        this.sprite.costumes = this.sprite.costumes
+            .slice(0, index)
+            .concat(this.sprite.costumes.slice(index + 1));
 
         if (index === this.currentCostume && index === originalCostumeCount - 1) {
             this.setCostume(index - 1);
@@ -468,16 +447,11 @@ class RenderedTarget extends Target {
     /**
      * Add a sound, taking care to avoid duplicate names.
      * @param {!object} soundObject Object representing the sound.
-     * @param {?int} index Index at which to add costume
      */
-    addSound (soundObject, index) {
+    addSound (soundObject) {
         const usedNames = this.sprite.sounds.map(sound => sound.name);
         soundObject.name = StringUtil.unusedName(soundObject.name, usedNames);
-        if (index) {
-            this.sprite.sounds.splice(index, 0, soundObject);
-        } else {
-            this.sprite.sounds.push(soundObject);
-        }
+        this.sprite.sounds.push(soundObject);
     }
 
     /**
@@ -489,10 +463,7 @@ class RenderedTarget extends Target {
         const usedNames = this.sprite.sounds
             .filter((sound, index) => soundIndex !== index)
             .map(sound => sound.name);
-        const oldName = this.sprite.sounds[soundIndex].name;
-        const newUnusedName = StringUtil.unusedName(newName, usedNames);
-        this.sprite.sounds[soundIndex].name = newUnusedName;
-        this.blocks.updateAssetName(oldName, newUnusedName, 'sound');
+        this.sprite.sounds[soundIndex].name = StringUtil.unusedName(newName, usedNames);
     }
 
     /**
@@ -538,7 +509,7 @@ class RenderedTarget extends Target {
      */
     getCostumeIndexByName (costumeName) {
         for (let i = 0; i < this.sprite.costumes.length; i++) {
-            if (this.getCostumes()[i].name === costumeName) {
+            if (this.sprite.costumes[i].name === costumeName) {
                 return i;
             }
         }
@@ -550,7 +521,7 @@ class RenderedTarget extends Target {
      * @return {object} current costume
      */
     getCurrentCostume () {
-        return this.getCostumes()[this.currentCostume];
+        return this.sprite.costumes[this.currentCostume];
     }
 
     /**
@@ -576,7 +547,7 @@ class RenderedTarget extends Target {
     updateAllDrawableProperties () {
         if (this.renderer) {
             const renderedDirectionScale = this._getRenderedDirectionAndScale();
-            const costume = this.getCostumes()[this.currentCostume];
+            const costume = this.sprite.costumes[this.currentCostume];
             const bitmapResolution = costume.bitmapResolution || 1;
             const props = {
                 position: [this.x, this.y],
@@ -644,7 +615,8 @@ class RenderedTarget extends Target {
             // Limits test to this Drawable, so this will return true
             // even if the clone is obscured by another Drawable.
             const pickResult = this.runtime.renderer.pick(
-                x, y,
+                x + (this.runtime.constructor.STAGE_WIDTH / 2),
+                -y + (this.runtime.constructor.STAGE_HEIGHT / 2),
                 null, null,
                 [this.drawableID]
             );
@@ -726,29 +698,10 @@ class RenderedTarget extends Target {
     }
 
     /**
-     * Move to the back layer.
+     * Move back a number of layers.
+     * @param {number} nLayers How many layers to go back.
      */
-    goToBack () {
-        if (this.renderer) {
-            this.renderer.setDrawableOrder(this.drawableID, -Infinity, false, 1);
-        }
-    }
-
-    /**
-     * Move forward a number of layers.
-     * @param {number} nLayers How many layers to go forward.
-     */
-    goForwardLayers (nLayers) {
-        if (this.renderer) {
-            this.renderer.setDrawableOrder(this.drawableID, nLayers, true, 1);
-        }
-    }
-
-    /**
-     * Move backward a number of layers.
-     * @param {number} nLayers How many layers to go backward.
-     */
-    goBackwardLayers (nLayers) {
+    goBackLayers (nLayers) {
         if (this.renderer) {
             this.renderer.setDrawableOrder(this.drawableID, -nLayers, true, 1);
         }
@@ -858,6 +811,7 @@ class RenderedTarget extends Target {
             newTarget.effects = JSON.parse(JSON.stringify(this.effects));
             newTarget.variables = JSON.parse(JSON.stringify(this.variables));
             newTarget.lists = JSON.parse(JSON.stringify(this.lists));
+            newTarget.initDrawable();
             newTarget.updateAllDrawableProperties();
             newTarget.goBehindOther(this);
             return newTarget;
@@ -890,10 +844,11 @@ class RenderedTarget extends Target {
      */
     postSpriteInfo (data) {
         const force = data.hasOwnProperty('force') ? data.force : null;
-        const isXChanged = data.hasOwnProperty('x');
-        const isYChanged = data.hasOwnProperty('y');
-        if (isXChanged || isYChanged) {
-            this.setXY(isXChanged ? data.x : this.x, isYChanged ? data.y : this.y, force);
+        if (data.hasOwnProperty('x')) {
+            this.setXY(data.x, this.y, force);
+        }
+        if (data.hasOwnProperty('y')) {
+            this.setXY(this.x, data.y, force);
         }
         if (data.hasOwnProperty('direction')) {
             this.setDirection(data.direction);
@@ -906,9 +861,6 @@ class RenderedTarget extends Target {
         }
         if (data.hasOwnProperty('visible')) {
             this.setVisible(data.visible);
-        }
-        if (data.hasOwnProperty('size')) {
-            this.setSize(data.size);
         }
     }
 
@@ -967,10 +919,6 @@ class RenderedTarget extends Target {
             if (this.visible) {
                 this.runtime.requestRedraw();
             }
-        }
-        if (this.audioPlayer) {
-            this.audioPlayer.stopAllSounds();
-            this.audioPlayer.dispose();
         }
     }
 }

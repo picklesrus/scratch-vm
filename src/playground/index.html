@@ -8,21 +8,19 @@
 </head>
 <body>
   <h2>Scratch VM Benchmark</h2>
-  <p class="description">
+  <p>
     Welcome to the scratch-vm benchmark. This tool helps you profile a scratch
     project. When you load the page, it:
-    <ol class="description">
+    <ol>
       <li>loads the default project and enables turbo mode
       <li>runs the project for 4 seconds to warm up
       <li>profiles for 6 seconds
       <li>stops and reports
     </ol>
   </p>
-  <div class="run-form">
-      <input type="text" value="119615668">
-      <button class="run">run</button>
-  </div>
-  <p class="run-push">
+  <input type="text" value="119615668">
+  <button class="run">run</button>
+  <p>
     <i>Try a different project, like `130041250`</i>
   </p>
 
@@ -45,14 +43,6 @@
       <label>Blocks executed:</label>
       <span class="profile-count-value profile-count-blocks-executed">...</span>
     </div>
-    <a class="share"><div class="profile-count">
-      <label>Share this report</label>
-    </div></a>
-    <a class="share" target="_parent">
-        <div class="profile-count">
-            <label>Run the full suite</label>
-        </div>
-    </a>
   </div>
 
   <div class="profile-tables">
@@ -83,8 +73,6 @@
   <script src="./vendor.js"></script>
   <!-- Storage module -->
   <script src="./scratch-storage.js"></script>
-  <!-- Stage rendering -->
-  <script src="./scratch-render.js"></script>
   <!-- VM -->
   <script src="./scratch-vm.js"></script>
   <!-- Playground -->

@@ -40,20 +40,10 @@ class Mouse {
      */
     postData (data) {
         if (data.x) {
-            this._clientX = data.x;
-            this._scratchX = MathUtil.clamp(
-                480 * ((data.x / data.canvasWidth) - 0.5),
-                -240,
-                240
-            );
+            this._x = data.x - (data.canvasWidth / 2);
         }
         if (data.y) {
-            this._clientY = data.y;
-            this._scratchY = MathUtil.clamp(
-                -360 * ((data.y / data.canvasHeight) - 0.5),
-                -180,
-                180
-            );
+            this._y = data.y - (data.canvasHeight / 2);
         }
         if (typeof data.isDown !== 'undefined') {
             this._isDown = data.isDown;
@@ -64,35 +54,19 @@ class Mouse {
     }
 
     /**
-     * Get the X position of the mouse in client coordinates.
-     * @return {number} Non-clamped X position of the mouse cursor.
-     */
-    getClientX () {
-        return this._clientX;
-    }
-
-    /**
-     * Get the Y position of the mouse in client coordinates.
-     * @return {number} Non-clamped Y position of the mouse cursor.
-     */
-    getClientY () {
-        return this._clientY;
-    }
-
-    /**
-     * Get the X position of the mouse in scratch coordinates.
+     * Get the X position of the mouse.
      * @return {number} Clamped X position of the mouse cursor.
      */
-    getScratchX () {
-        return this._scratchX;
+    getX () {
+        return MathUtil.clamp(this._x, -240, 240);
     }
 
     /**
-     * Get the Y position of the mouse in scratch coordinates.
+     * Get the Y position of the mouse.
      * @return {number} Clamped Y position of the mouse cursor.
      */
-    getScratchY () {
-        return this._scratchY;
+    getY () {
+        return MathUtil.clamp(-this._y, -180, 180);
     }
 
     /**
