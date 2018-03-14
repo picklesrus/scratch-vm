@@ -22,7 +22,7 @@ class Scratch3SpeechBlocks {
 
     // For seeding the recognition engine and for deciding whether to accept results.
     // TODO: pull these values out of the hat blocks inste of hard coding them.
-    this.tempList = ['cars', 'snow', 'rain', 'sun', 'cat', 'knock knock', 'who', 'are you an owl'];
+    this._phrase_list = [];
 
     /**
      * The most recent result received from the speech API transcription.
@@ -218,13 +218,32 @@ class Scratch3SpeechBlocks {
       // it, start streaming the audio bytes to the server and listening for
       // transcriptions.
       this._socket.addEventListener('message', this._socketMessageCallback, {once: true});
+      console.log('sending phrase list: ' + this._phrase_list);
       this._socket.send(JSON.stringify(
         {sampleRate: this._context.sampleRate,
-         phrases: this.tempList,
+         phrases: this._phrase_list,
         }
       ));
   }
 	
+  _scanBlocksForPhraseList() {
+    var words = [];
+    // For each each target, walk through the top level blocks and check whether
+    // they are speech hat/when I hear blocks.
+    this.runtime.targets.forEach(function(target) {
+      target.blocks._scripts.forEach(function(id) {
+        var b = target.blocks.getBlock(id);
+        if (b.opcode === 'speech.whenIHearHat') {
+          // Grab the text from the hat block's shadow.
+          var inputId = b.inputs.PHRASE.block;
+          var inputBlock = target.blocks.getBlock(inputId);
+          var word = target.blocks.getBlock(inputId).fields.TEXT.value;
+          words.push(word);          
+        }
+      })
+    });
+    this._phrase_list = words;
+  }
 	// Setup listening for socket.
 	_socketMessageCallback(e) {
     console.log('socket message callback');
@@ -286,7 +305,9 @@ class Scratch3SpeechBlocks {
     // trim off any white space
     text = text.trim();
 
-    if (!result.isFinal && result.stability < .85 && !this.tempList.includes(text)) {
+
+
+    if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(text)) {
       this._possible_result = text;
       console.log('not good enough yet text: ' + text);
       return;
@@ -478,6 +499,7 @@ class Scratch3SpeechBlocks {
 	listenAndWait(args) {
      this._playSound(this._startSoundBuffer);
      this._showIndicator();
+      this._scanBlocksForPhraseList();
       this.temp_speech = '';
       var speechPromise = new Promise(resolve => {
          var listeningInProgress = this._speechList.length > 0;
