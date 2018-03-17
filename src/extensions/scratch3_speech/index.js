@@ -38,6 +38,8 @@ class Scratch3SpeechBlocks {
     // '' at the beginning of the listen to '<transcription value' at the end.
     this.temp_speech = null;
 
+    this.match_result = null;
+
     /**
      * The list of queued `resolve` callbacks for speech'.
      * @type {!Array}
@@ -51,6 +53,7 @@ class Scratch3SpeechBlocks {
     this._alreadyListening = false;
 
     this._speechTimeout = null;
+    this._speechTimeoutResponseTimeout = null;
 
     // The ScriptProcessorNode hooked up to the audio context.
     this._scriptNode = null;
@@ -69,6 +72,18 @@ class Scratch3SpeechBlocks {
     this._startSoundBuffer = null;
     this._endSoundBuffer = null;
 
+    // Defaults.
+    // Redefine these in your program to override the defaults.
+
+    // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
+    this.Match_Threshold = 0.5;
+    // How far to search for a match (0 = exact location, 1000+ = broad match).
+    // A match this many characters away from the expected location will add
+    // 1.0 to the score (0.0 is a perfect match).
+    this.Match_Distance = 1000;
+    
+    // The number of bits in an int.
+    this.Match_MaxBits = 32;
     this._loadUISounds();
 
     // Come back and figure out which of these I really need.
@@ -81,6 +96,7 @@ class Scratch3SpeechBlocks {
     this._processAudioCallback = this._processAudioCallback.bind(this);
     this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
     this._timeOutListening = this._timeOutListening.bind(this);
+    this._timeOutWaitingforFinal = this._timeOutWaitingforFinal.bind(this);
     this._startNextListening = this._startNextListening.bind(this);
     this._resetActiveListening = this._resetActiveListening.bind(this);
 
@@ -89,6 +105,172 @@ class Scratch3SpeechBlocks {
     this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
   }
 
+  //  MATCH FUNCTIONS
+
+  /**
+   * Locate the best instance of 'pattern' in 'text' near 'loc'.
+   * @param {string} text The text to search.
+   * @param {string} pattern The pattern to search for.
+   * @param {number} loc The location to search around.
+   * @return {number} Best match index or -1.
+   */
+  match_main (text, pattern, loc) {
+    // Check for null inputs.
+    if (text == null || pattern == null || loc == null) {
+      throw new Error('Null input. (match_main)');
+    }
+
+    loc = Math.max(0, Math.min(loc, text.length));
+    if (text == pattern) {
+      // Shortcut (potentially not guaranteed by the algorithm)
+      return 0;
+    } else if (!text.length) {
+      // Nothing to match.
+      return -1;
+    } else if (text.substring(loc, loc + pattern.length) == pattern) {
+      // Perfect match at the perfect spot!  (Includes case of null pattern)
+      return loc;
+    } else {
+      // Do a fuzzy compare.
+      return this.match_bitap_(text, pattern, loc);
+    }
+  };
+
+
+  /**
+   * Locate the best instance of 'pattern' in 'text' near 'loc' using the
+   * Bitap algorithm.
+   * @param {string} text The text to search.
+   * @param {string} pattern The pattern to search for.
+   * @param {number} loc The location to search around.
+   * @return {number} Best match index or -1.
+   * @private
+   */
+  match_bitap_ (text, pattern, loc) {
+    if (pattern.length > this.Match_MaxBits) {
+      throw new Error('Pattern too long for this browser.');
+    }
+
+    // Initialise the alphabet.
+    var s = this.match_alphabet_(pattern);
+
+    var dmp = this;  // 'this' becomes 'window' in a closure.
+
+    /**
+     * Compute and return the score for a match with e errors and x location.
+     * Accesses loc and pattern through being a closure.
+     * @param {number} e Number of errors in match.
+     * @param {number} x Location of match.
+     * @return {number} Overall score for match (0.0 = good, 1.0 = bad).
+     * @private
+     */
+    function match_bitapScore_(e, x) {
+      var accuracy = e / pattern.length;
+      var proximity = Math.abs(loc - x);
+      if (!dmp.Match_Distance) {
+        // Dodge divide by zero error.
+        return proximity ? 1.0 : accuracy;
+      }
+      return accuracy + (proximity / dmp.Match_Distance);
+    }
+
+    // Highest score beyond which we give up.
+    var score_threshold = this.Match_Threshold;
+    // Is there a nearby exact match? (speedup)
+    var best_loc = text.indexOf(pattern, loc);
+    if (best_loc != -1) {
+      score_threshold = Math.min(match_bitapScore_(0, best_loc), score_threshold);
+      // What about in the other direction? (speedup)
+      best_loc = text.lastIndexOf(pattern, loc + pattern.length);
+      if (best_loc != -1) {
+        score_threshold =
+            Math.min(match_bitapScore_(0, best_loc), score_threshold);
+      }
+    }
+
+    // Initialise the bit arrays.
+    var matchmask = 1 << (pattern.length - 1);
+    best_loc = -1;
+
+    var bin_min, bin_mid;
+    var bin_max = pattern.length + text.length;
+    var last_rd;
+    for (var d = 0; d < pattern.length; d++) {
+      // Scan for the best match; each iteration allows for one more error.
+      // Run a binary search to determine how far from 'loc' we can stray at this
+      // error level.
+      bin_min = 0;
+      bin_mid = bin_max;
+      while (bin_min < bin_mid) {
+        if (match_bitapScore_(d, loc + bin_mid) <= score_threshold) {
+          bin_min = bin_mid;
+        } else {
+          bin_max = bin_mid;
+        }
+        bin_mid = Math.floor((bin_max - bin_min) / 2 + bin_min);
+      }
+      // Use the result from this iteration as the maximum for the next.
+      bin_max = bin_mid;
+      var start = Math.max(1, loc - bin_mid + 1);
+      var finish = Math.min(loc + bin_mid, text.length) + pattern.length;
+
+      var rd = Array(finish + 2);
+      rd[finish + 1] = (1 << d) - 1;
+      for (var j = finish; j >= start; j--) {
+        // The alphabet (s) is a sparse hash, so the following line generates
+        // warnings.
+        var charMatch = s[text.charAt(j - 1)];
+        if (d === 0) {  // First pass: exact match.
+          rd[j] = ((rd[j + 1] << 1) | 1) & charMatch;
+        } else {  // Subsequent passes: fuzzy match.
+          rd[j] = (((rd[j + 1] << 1) | 1) & charMatch) |
+                  (((last_rd[j + 1] | last_rd[j]) << 1) | 1) |
+                  last_rd[j + 1];
+        }
+        if (rd[j] & matchmask) {
+          var score = match_bitapScore_(d, j - 1);
+          // This match will almost certainly be better than any existing match.
+          // But check anyway.
+          if (score <= score_threshold) {
+            // Told you so.
+            score_threshold = score;
+            best_loc = j - 1;
+            if (best_loc > loc) {
+              // When passing loc, don't exceed our current distance from loc.
+              start = Math.max(1, 2 * loc - best_loc);
+            } else {
+              // Already passed loc, downhill from here on in.
+              break;
+            }
+          }
+        }
+      }
+      // No hope for a (better) match at greater error levels.
+      if (match_bitapScore_(d + 1, loc) > score_threshold) {
+        break;
+      }
+      last_rd = rd;
+    }
+    return best_loc;
+  }
+
+
+  /**
+   * Initialise the alphabet for the Bitap algorithm.
+   * @param {string} pattern The text to encode.
+   * @return {!Object} Hash of character locations.
+   * @private
+   */
+  match_alphabet_ (pattern) {
+    var s = {};
+    for (var i = 0; i < pattern.length; i++) {
+      s[pattern.charAt(i)] = 0;
+    }
+    for (var i = 0; i < pattern.length; i++) {
+      s[pattern.charAt(i)] |= 1 << (pattern.length - i - 1);
+    }
+    return s;
+  }
 
     /**
      * Download and decode the UI sounds.
@@ -197,7 +379,15 @@ class Scratch3SpeechBlocks {
         this._scriptNode.disconnect();        
       }
       this._socket.send('stopPlease');
+      // Give it a couple seconds to response before giving up and assuming nothing.
+      this._speechTimeoutResponseTimeout = setTimeout(this._timeOutWaitingforFinal, 3000);
+
     }
+  }
+
+  _timeOutWaitingforFinal() {
+    console.log('timeing out waiting for last response');
+    this._resetActiveListening();
   }
 	// Callback to handle initial setting up of a socket.
 	// Currently we send a setup message (only contains sample rate) but might
@@ -289,7 +479,7 @@ class Scratch3SpeechBlocks {
  	  console.log('timeout fired. Resetting listening');
     //this.current_utterance = '';  // should this be NULL OR empty?
   //  this.temp_speech = ''; // should this be null or empty?
-// 	  this._resetActiveListening();
+//    this._resetActiveListening();
   this._stopTranscription();
   this._playSound(this._endSoundBuffer);
  }
@@ -304,19 +494,37 @@ class Scratch3SpeechBlocks {
     text = text.replace(/[.?!]/g, '');
     // trim off any white space
     text = text.trim();
+    
+    //this._computeMatch(text);
 
+    var phrases = this._phrase_list.join(' ');
+    var match = this._computeMatch(text, phrases)
+    if (match != -1) {
+      console.log('partial match.');
+      this.match_result = text.substring(match, match + phrases.length)
+      console.log('match result: ' + this.match_result);
+    }
+    var shouldKeepMatch =  match != -1 && result.stability > .85; // don't keep matches if the stability is low.
 
-
-    if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(text)) {
+    //if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(text) && match == -1) {
+    if (!result.isFinal  && !this._phrase_list.includes(text) && !shouldKeepMatch) {
       this._possible_result = text;
       console.log('not good enough yet text: ' + text);
       return;
     }
 
+  
  	  var resolve = this._speechList[0];
- 	  this.current_utterance = text;
+    if (this.match_result) {
+      this.current_utterance = this.match_result;
+    } else {
+      this.current_utterance = text;      
+    }
+    // reset match_result.
+    this.match_result = null;
+
     this.temp_speech = text;
- 	  console.log('current utterance set to: ' + text);
+ 	  console.log('current utterance set to: ' + this.current_utterance);
  	  for (var i = 0; i < this._speechList.length; i++) {
   	  var resFn = this._speechList[i];
   	  resFn();
@@ -332,8 +540,32 @@ class Scratch3SpeechBlocks {
       clearTimeout(this._speechTimeout);
       this._speechTimeout = null;
     }
+    // timeout for waiting for last result.
+    if (this._speechTimeoutResponseTimeout) {
+      clearTimeout(this._speechTimeoutResponseTimeout);
+      this._speechTimeoutResponseTimeout = null;
+    }
  }
 
+ _computeMatch(needle, haystack) {
+   //var text = this._phrase_list.join(' ');
+
+   // Don't bother matching if any are null.
+   if (!needle || !haystack) {
+     return -1;
+   }
+
+   var loc = 0;
+
+   var match = this.match_main(haystack, needle, loc);
+   if (match == -1) {
+    //console.log('no match');
+   } else {
+     var quote = haystack.substring(match, match + haystack.length);
+//     console.log(' match found at character  ' + match + ' ' + quote);
+   }
+   return match;
+ }
 
  // Disconnect all the audio stuff on the client.
  _suspendListening() {
@@ -481,10 +713,12 @@ class Scratch3SpeechBlocks {
     // trim off any white space
     input = input.trim();
 
-    if (haystack && haystack.indexOf(input) != -1) {
-      return true;
-    }
-    return false;
+    var match = this._computeMatch(needle, haystack);
+    return match != -1;
+    // if (haystack && haystack.indexOf(input) != -1) {
+    //   return true;
+    // }
+    // return false;
   }
 
 	
@@ -538,5 +772,8 @@ class Scratch3SpeechBlocks {
   getSpeech(args) {
     return this.current_utterance;
   }
+
+  
+
 };
 module.exports = Scratch3SpeechBlocks;
