@@ -378,7 +378,7 @@ class Scratch3SpeechBlocks {
       if (this._scriptNode) {
         this._scriptNode.disconnect();        
       }
-      this._socket.send('stopPlease');
+      this._socket.send('stopTranscription');
       // Give it a couple seconds to response before giving up and assuming nothing.
       this._speechTimeoutResponseTimeout = setTimeout(this._timeOutWaitingforFinal, 3000);
 
