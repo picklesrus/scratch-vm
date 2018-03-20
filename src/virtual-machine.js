@@ -773,6 +773,7 @@ class VirtualMachine extends EventEmitter {
         for (let i = 0; i < blocks.length; i++) {
             target.blocks.createBlock(blocks[i]);
         }
+        target.blocks.updateTargetSpecificBlocks(target.isStage);
     }
 
     /**
