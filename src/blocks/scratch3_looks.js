@@ -153,13 +153,16 @@ class Scratch3LooksBlocks {
      * @private
      */
     _renderBubble (target) {
+        if (!this.runtime.renderer) return;
+
         const bubbleState = this._getBubbleState(target);
         const {drawableVisible, type, text, onSpriteRight} = bubbleState;
 
         // Remove the bubble if target is not visible, or text is being set to blank
         // without being initialized. See comment below about blank text optimization.
         if (!target.visible || (text === '' && !bubbleState.skinId)) {
-            return this._onTargetWillExit(target);
+            this._onTargetWillExit(target);
+            return;
         }
 
         if (bubbleState.skinId) {
@@ -253,7 +256,7 @@ class Scratch3LooksBlocks {
         // @TODO in 2.0 calling say/think resets the right/left bias of the bubble
         let message = args.MESSAGE;
         if (typeof message === 'number') {
-            message = message.toFixed(2);
+            message = parseFloat(message.toFixed(2));
         }
         message = String(message);
         this.runtime.emit('SAY', util.target, 'say', message);

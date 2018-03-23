@@ -12,6 +12,13 @@ const log = require('../../util/log');
 const iconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_white_24dp.png'
 const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_grey600_24dp.png'
 
+let assetData = {};
+try {
+    assetData = require('./manifest');
+} catch (e) {
+    // Non-webpack environment, don't worry about assets.
+}
+
 class Scratch3SpeechBlocks {
 	constructor (runtime) {
     /**
@@ -33,7 +40,7 @@ class Scratch3SpeechBlocks {
     // using this to test out hat blocks that edge trigger.  The reporter block
     // uses current_utterance and we probably? don't want to reset the value unless
     // we have new transcription results.  But, in order to detect someone saying
-    // the same thing twice in two subsequent liten and wait blocks 
+    // the same thing twice in two subsequent liten and wait blocks
     // and still trigger the hat, we need this to go from
     // '' at the beginning of the listen to '<transcription value' at the end.
     this.temp_speech = null;
@@ -81,7 +88,7 @@ class Scratch3SpeechBlocks {
     // A match this many characters away from the expected location will add
     // 1.0 to the score (0.0 is a perfect match).
     this.Match_Distance = 1000;
-    
+
     // The number of bits in an int.
     this.Match_MaxBits = 32;
     this._loadUISounds();
@@ -273,15 +280,44 @@ class Scratch3SpeechBlocks {
   }
 
     /**
-     * Download and decode the UI sounds.
+     * Decode the UI sounds.
      */
     _loadUISounds () {
-        this._loadSound('speech-rec-start').then(buffer => {
+        const startSoundBuffer = assetData['speech-rec-start.mp3'].buffer;
+        this._decodeSound(startSoundBuffer).then(buffer => {
             this._startSoundBuffer = buffer;
         });
-        this._loadSound('speech-rec-end').then(buffer => {
+
+        const endSoundBuffer = assetData['speech-rec-end.mp3'].buffer;
+        this._decodeSound(endSoundBuffer).then(buffer => {
             this._endSoundBuffer = buffer;
         });
+    }
+
+    /**
+     * Decode a sound and return a promise with the audio buffer.
+     * @param  {ArrayBuffer} soundBuffer - a buffer containing the encoded audio.
+     * @return {Promise} - a promise which will resolve once the sound has decoded.
+     */
+    _decodeSound (soundBuffer) {
+        const context = this.runtime.audioEngine && this.runtime.audioEngine.audioContext;
+
+        if (!context) {
+            return Promise.reject(new Error('No Audio Context Detected'));
+        }
+
+        // Check for newer promise-based API
+        if (context.decodeAudioData.length === 1) {
+            return context.decodeAudioData(soundBuffer);
+        } else { // eslint-disable-line no-else-return
+            // Fall back to callback API
+            return new Promise((resolve, reject) =>
+                context.decodeAudioData(soundBuffer,
+                    buffer => resolve(buffer),
+                    error => reject(error)
+                )
+            );
+        }
     }
 
     /**
@@ -376,7 +412,7 @@ class Scratch3SpeechBlocks {
     if (this._socket) {
       this._context.suspend.bind(this._context);
       if (this._scriptNode) {
-        this._scriptNode.disconnect();        
+        this._scriptNode.disconnect();
       }
       this._socket.send('stopTranscription');
       // Give it a couple seconds to response before giving up and assuming nothing.
@@ -415,7 +451,7 @@ class Scratch3SpeechBlocks {
         }
       ));
   }
-	
+
   _scanBlocksForPhraseList() {
     var words = [];
     // For each each target, walk through the top level blocks and check whether
@@ -428,7 +464,7 @@ class Scratch3SpeechBlocks {
           var inputId = b.inputs.PHRASE.block;
           var inputBlock = target.blocks.getBlock(inputId);
           var word = target.blocks.getBlock(inputId).fields.TEXT.value;
-          words.push(word);          
+          words.push(word);
         }
       })
     });
@@ -452,11 +488,11 @@ class Scratch3SpeechBlocks {
 	// Called when we're ready to start listening and want to open a socket.
 	_newWebsocket() {
 		console.log('setting up new socket and setting up block timeout.');
-		var websocketPromise = new Promise(this._newSocketCallback); 
+		var websocketPromise = new Promise(this._newSocketCallback);
       Promise.all([this._audioPromise, websocketPromise]).then(
         this._setupSocketCallback).catch(console.log.bind(console));
 	}
-	
+
 	// Called when we're done listening and want to close the web socket server.
 	// Stops listening to the mic and whatnot as well.
 	_closeWebsocket() {
@@ -464,13 +500,13 @@ class Scratch3SpeechBlocks {
 	  // This is called on green flag to reset things that may never have existed
 	  // in the first place. Do a bunch of checks.
     if (this._scriptNode) {
-  	  this._scriptNode.disconnect();      	
+  	  this._scriptNode.disconnect();
     }
     if (this._sourceNode) this._sourceNode.disconnect();
     if (this._socket && this._socket.readyState === this._socket.OPEN) {
     	console.log('sending close socket message');
     	this._socket.close();
-    } 
+    }
 	}
 
 	// Called when a listen block times out without detecting an end of
@@ -481,11 +517,11 @@ class Scratch3SpeechBlocks {
   //  this.temp_speech = ''; // should this be null or empty?
 //    this._resetActiveListening();
   this._stopTranscription();
-  this._playSound(this._endSoundBuffer);
+  // this._playSound(this._endSoundBuffer);
  }
 
  // When we get a transcription result, save the result to current_utterance,
- // resolve the current promise.  
+ // resolve the current promise.
  _onTranscription (result) {
  	  var text = result.alternatives[0].transcript
     // Confidence seems to be 0 when a result has isFinal: true
@@ -494,7 +530,7 @@ class Scratch3SpeechBlocks {
     text = text.replace(/[.?!]/g, '');
     // trim off any white space
     text = text.trim();
-    
+
     //this._computeMatch(text);
 
     var phrases = this._phrase_list.join(' ');
@@ -513,12 +549,12 @@ class Scratch3SpeechBlocks {
       return;
     }
 
-  
+
  	  var resolve = this._speechList[0];
     if (this.match_result) {
       this.current_utterance = this.match_result;
     } else {
-      this.current_utterance = text;      
+      this.current_utterance = text;
     }
     // reset match_result.
     this.match_result = null;
@@ -529,7 +565,7 @@ class Scratch3SpeechBlocks {
   	  var resFn = this._speechList[i];
   	  resFn();
  	  }
-    this._playSound(this._endSoundBuffer);
+    // this._playSound(this._endSoundBuffer);
  	  // Pause the mic and close the web socket.
  	  this._context.suspend.bind(this._context);
  	  this._closeWebsocket();
@@ -579,7 +615,7 @@ class Scratch3SpeechBlocks {
     if (this._sourceNode) this._sourceNode.disconnect();
  }
 
- // This needs a new name - currently handles all messages fromt the socket 
+ // This needs a new name - currently handles all messages fromt the socket
  // server. Even the init message and the "end of utterance message";
   _onTranscriptionFromServer(e) {
     console.log('transcription ' + e.data);
@@ -602,7 +638,7 @@ class Scratch3SpeechBlocks {
     	return;
     }
     // Throw a transcription event that we'll catch later and decice whether to
-    // resolve the promise.  
+    // resolve the promise.
     //      this.runtime.emit('TRANSCRIPTION', result);
     this._onTranscription(result);
   }
@@ -665,11 +701,11 @@ class Scratch3SpeechBlocks {
 	      analyser = tempContext.createAnalyser();
 	      microphone.connect(analyser);
 	    }).catch(console.log.bind(console));
-	   
+
 	  this.initWebSocket();
 	}
 
-  
+
 
   /**
    * @returns {object} metadata for this extension and its blocks.
@@ -705,7 +741,7 @@ class Scratch3SpeechBlocks {
             ],
         };
   }
-	
+
   _speechMatches(needle, haystack) {
     let input = Cast.toString(needle).toLowerCase();
     // facilitate matches by removing some punctuation: . ? !
@@ -721,7 +757,7 @@ class Scratch3SpeechBlocks {
     // return false;
   }
 
-	
+
   whenIHearHat(args) {
     return this._speechMatches(args.PHRASE, this.temp_speech);
   }
@@ -730,30 +766,38 @@ class Scratch3SpeechBlocks {
     console.log('i should show a thing');
   }
 
-	listenAndWait(args) {
-     this._playSound(this._startSoundBuffer);
-     this._showIndicator();
-      this._scanBlocksForPhraseList();
-      this.temp_speech = '';
-      var speechPromise = new Promise(resolve => {
-         var listeningInProgress = this._speechList.length > 0;
-         this._speechList.push(resolve);
-         if (!listeningInProgress) {
-         	this._startNextListening();
-         }
+    listenAndWait(args) {
+     return this._playSound(this._startSoundBuffer).then(() => {
+         this._showIndicator();
+          this._scanBlocksForPhraseList();
+          this.temp_speech = '';
+          var speechPromise = new Promise(resolve => {
+             var listeningInProgress = this._speechList.length > 0;
+             this._speechList.push(resolve);
+             if (!listeningInProgress) {
+             	this._startNextListening();
+             }
+          });
+          return speechPromise.then(() => {
+            return this._playSound(this._endSoundBuffer);
+          });
       });
-      return speechPromise;
     }
 
 
   _playSound(buffer) {
     if (this.runtime.audioEngine === null) return;
-        const context = this.runtime.audioEngine.audioContext;
-        const bufferSource = context.createBufferSource();
-        bufferSource.buffer = buffer;
-        bufferSource.connect(this.runtime.audioEngine.input);
-        bufferSource.start();
-    }
+    const context = this.runtime.audioEngine.audioContext;
+    const bufferSource = context.createBufferSource();
+    bufferSource.buffer = buffer;
+    bufferSource.connect(this.runtime.audioEngine.input);
+    bufferSource.start();
+    return new Promise(resolve => {
+        bufferSource.onended = () => {
+            resolve();
+        };
+    });
+}
 
   // Kick off listening for the next block waiting in the queue.
   _startNextListening() {
@@ -773,7 +817,7 @@ class Scratch3SpeechBlocks {
     return this.current_utterance;
   }
 
-  
+
 
 };
 module.exports = Scratch3SpeechBlocks;
