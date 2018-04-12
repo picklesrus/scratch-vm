@@ -401,7 +401,8 @@ class Scratch3SpeechBlocks {
     console.log('creating a new web socket');
   	// TODO: Stop hardcoding localhost and port
     //var server = 'ws://scratch-speech-prod.us-east-1.elasticbeanstalk.com';
-    var server = 'ws://localhost:8080';
+    //var server = 'ws://localhost:8080';
+    var server = 'wss://speech.scratch.mit.edu';
     this._socket = new WebSocket(server);
     this._socket.addEventListener('open', resolve);
     this._socket.addEventListener('error', reject);
