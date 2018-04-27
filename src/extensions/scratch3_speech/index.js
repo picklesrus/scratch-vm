@@ -83,7 +83,7 @@ class Scratch3SpeechBlocks {
     // Redefine these in your program to override the defaults.
 
     // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
-    this.Match_Threshold = 0.5;
+    this.Match_Threshold = 0.3;
     // How far to search for a match (0 = exact location, 1000+ = broad match).
     // A match this many characters away from the expected location will add
     // 1.0 to the score (0.0 is a perfect match).
@@ -156,6 +156,8 @@ class Scratch3SpeechBlocks {
   match_bitap_ (text, pattern, loc) {
     if (pattern.length > this.Match_MaxBits) {
       throw new Error('Pattern too long for this browser.');
+      //console.log('Too long for match algorithm');
+      //return -1;
     }
 
     // Initialise the alphabet.
@@ -524,29 +526,29 @@ class Scratch3SpeechBlocks {
  // When we get a transcription result, save the result to current_utterance,
  // resolve the current promise.
  _onTranscription (result) {
- 	  var text = result.alternatives[0].transcript
+ 	  var transcriptionResult = result.alternatives[0].transcript
     // Confidence seems to be 0 when a result has isFinal: true
- 	  text = Cast.toString(text).toLowerCase();
+ 	  transcriptionResult = Cast.toString(transcriptionResult).toLowerCase();
     // facilitate matches by removing some punctuation: . ? !
-    text = text.replace(/[.?!]/g, '');
+    transcriptionResult = transcriptionResult.replace(/[.?!]/g, '');
     // trim off any white space
-    text = text.trim();
+    transcriptionResult = transcriptionResult.trim();
 
-    //this._computeMatch(text);
+    //this._computeMatch(transcriptionResult);
 
     var phrases = this._phrase_list.join(' ');
-    var match = this._computeMatch(text, phrases)
+    var match = this._computeMatch(transcriptionResult, phrases)
     if (match != -1) {
       console.log('partial match.');
-      this.match_result = text.substring(match, match + phrases.length)
+      this.match_result = transcriptionResult.substring(match, match + phrases.length)
       console.log('match result: ' + this.match_result);
     }
     var shouldKeepMatch =  match != -1 && result.stability > .85; // don't keep matches if the stability is low.
 
-    //if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(text) && match == -1) {
-    if (!result.isFinal  && !this._phrase_list.includes(text) && !shouldKeepMatch) {
-      this._possible_result = text;
-      console.log('not good enough yet text: ' + text);
+    //if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(transcriptionResult) && match == -1) {
+    if (!result.isFinal  && !this._phrase_list.includes(transcriptionResult) && !shouldKeepMatch) {
+      this._possible_result = transcriptionResult;
+      console.log('not good enough yet transcriptionResult: ' + transcriptionResult);
       return;
     }
 
@@ -555,12 +557,12 @@ class Scratch3SpeechBlocks {
     if (this.match_result) {
       this.current_utterance = this.match_result;
     } else {
-      this.current_utterance = text;
+      this.current_utterance = transcriptionResult;
     }
     // reset match_result.
     this.match_result = null;
 
-    this.temp_speech = text;
+    this.temp_speech = transcriptionResult;
  	  console.log('current utterance set to: ' + this.current_utterance);
  	  for (var i = 0; i < this._speechList.length; i++) {
   	  var resFn = this._speechList[i];
@@ -584,21 +586,21 @@ class Scratch3SpeechBlocks {
     }
  }
 
- _computeMatch(needle, haystack) {
+ _computeMatch(text, pattern) {
    //var text = this._phrase_list.join(' ');
 
    // Don't bother matching if any are null.
-   if (!needle || !haystack) {
+   if (!pattern || !text) {
      return -1;
    }
 
    var loc = 0;
 
-   var match = this.match_main(haystack, needle, loc);
+   var match = this.match_main(text, pattern, loc);
    if (match == -1) {
     //console.log('no match');
    } else {
-     var quote = haystack.substring(match, match + haystack.length);
+     var quote = text.substring(match, match + text.length);
 //     console.log(' match found at character  ' + match + ' ' + quote);
    }
    return match;
@@ -743,14 +745,14 @@ class Scratch3SpeechBlocks {
         };
   }
 
-  _speechMatches(needle, haystack) {
-    let input = Cast.toString(needle).toLowerCase();
+  _speechMatches(pattern, text) {
+    let input = Cast.toString(pattern).toLowerCase();
     // facilitate matches by removing some punctuation: . ? !
     input = input.replace(/[.?!]/g, '');
     // trim off any white space
     input = input.trim();
 
-    var match = this._computeMatch(needle, haystack);
+    var match = this._computeMatch(text, pattern);
     return match != -1;
     // if (haystack && haystack.indexOf(input) != -1) {
     //   return true;
