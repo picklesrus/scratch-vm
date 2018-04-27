@@ -1,17 +1,26 @@
 const ArgumentType = require('../../extension-support/argument-type');
 const Cast = require('../../util/cast');
 const BlockType = require('../../extension-support/block-type');
-const color = require('../../util/color');
 const log = require('../../util/log');
 
 /**
- * Icon svg to be displayed at the left edge of each extension block, encoded as a data URI.
+ * Url of icon to be displayed at the left edge of each extension block.
+ * TODO: Find the final Icon. Replace it with the right format. data URI?
  * @type {string}
  */
-// eslint-disable-next-line max-len
-const iconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_white_24dp.png'
-const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_grey600_24dp.png'
+const iconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_white_24dp.png';
 
+/**
+ * Url of icon to be displayed in the toolbox menu for the extension category.
+ * TODO: Find the final Icon. Replace it with the right format. data URI?
+ * @type {string}
+ */
+const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_grey600_24dp.png';
+
+/**
+ * The start and stop sounds, loaded as static assets.
+ * @type {object}
+ */
 let assetData = {};
 try {
     assetData = require('./manifest');
@@ -20,32 +29,38 @@ try {
 }
 
 class Scratch3SpeechBlocks {
-	constructor (runtime) {
-    /**
-     * The runtime instantiating this block package.
-     * @type {Runtime}
-     */
-    this.runtime = runtime;
+    constructor (runtime) {
+        /**
+         * The runtime instantiating this block package.
+         * @type {Runtime}
+         */
+        this.runtime = runtime;
 
-    // For seeding the recognition engine and for deciding whether to accept results.
-    // TODO: pull these values out of the hat blocks inste of hard coding them.
-    this._phrase_list = [];
+        /**
+         * An array of phrases from the [when I hear] hat blocks.
+         * The list of phrases in the when I hear hat blocks.  This list is sent
+         * to the speech api to seed the recognition engine and for deciding
+         * whether the transcription results match.
+         * @type {Array}
+         * @private
+         */
+        this._phraseList = [];
 
-    /**
-     * The most recent result received from the speech API transcription.
-     * @type {String}
-     */
-    this.current_utterance = null;
+        /**
+         * The most recent transcription result received from the speech API.
+         * @type {String}
+         * @private
+         */
+        this._currentUtterance = null;
 
-    // using this to test out hat blocks that edge trigger.  The reporter block
-    // uses current_utterance and we probably? don't want to reset the value unless
-    // we have new transcription results.  But, in order to detect someone saying
-    // the same thing twice in two subsequent liten and wait blocks
-    // and still trigger the hat, we need this to go from
-    // '' at the beginning of the listen to '<transcription value' at the end.
-    this.temp_speech = null;
-
-    this.match_result = null;
+        // TODO: rename and jsdoc this!
+        // using this to test out hat blocks that edge trigger.  The reporter block
+        // uses _currentUtterance and we probably? don't want to reset the value unless
+        // we have new transcription results.  But, in order to detect someone saying
+        // the same thing twice in two subsequent liten and wait blocks
+        // and still trigger the hat, we need this to go from
+        // '' at the beginning of the listen to '<transcription value' at the end.
+        this.temp_speech = null;
 
     /**
      * The list of queued `resolve` callbacks for speech'.
@@ -447,10 +462,10 @@ class Scratch3SpeechBlocks {
       // it, start streaming the audio bytes to the server and listening for
       // transcriptions.
       this._socket.addEventListener('message', this._socketMessageCallback, {once: true});
-      console.log('sending phrase list: ' + this._phrase_list);
+      console.log('sending phrase list: ' + this._phraseList);
       this._socket.send(JSON.stringify(
         {sampleRate: this._context.sampleRate,
-         phrases: this._phrase_list,
+         phrases: this._phraseList,
         }
       ));
   }
@@ -471,7 +486,7 @@ class Scratch3SpeechBlocks {
         }
       })
     });
-    this._phrase_list = words;
+    this._phraseList = words;
   }
 	// Setup listening for socket.
 	_socketMessageCallback(e) {
@@ -516,14 +531,14 @@ class Scratch3SpeechBlocks {
 	// utterance message during transcription.
  _timeOutListening() {
  	  console.log('timeout fired. Resetting listening');
-    //this.current_utterance = '';  // should this be NULL OR empty?
+    //this._currentUtterance = '';  // should this be NULL OR empty?
   //  this.temp_speech = ''; // should this be null or empty?
 //    this._resetActiveListening();
   this._stopTranscription();
   // this._playSound(this._endSoundBuffer);
  }
 
- // When we get a transcription result, save the result to current_utterance,
+ // When we get a transcription result, save the result to _currentUtterance,
  // resolve the current promise.
  _onTranscription (result) {
  	  var transcriptionResult = result.alternatives[0].transcript
@@ -536,17 +551,19 @@ class Scratch3SpeechBlocks {
 
     //this._computeMatch(transcriptionResult);
 
-    var phrases = this._phrase_list.join(' ');
+    var phrases = this._phraseList.join(' ');
+    let matchResult = null;
     var match = this._computeMatch(transcriptionResult, phrases)
+
     if (match != -1) {
       console.log('partial match.');
-      this.match_result = transcriptionResult.substring(match, match + phrases.length)
-      console.log('match result: ' + this.match_result);
+      matchResult = transcriptionResult.substring(match, match + phrases.length)
+      console.log('match result: ' + matchResult);
     }
     var shouldKeepMatch =  match != -1 && result.stability > .85; // don't keep matches if the stability is low.
 
-    //if (!result.isFinal && result.stability < .85 && !this._phrase_list.includes(transcriptionResult) && match == -1) {
-    if (!result.isFinal  && !this._phrase_list.includes(transcriptionResult) && !shouldKeepMatch) {
+    //if (!result.isFinal && result.stability < .85 && !this._phraseList.includes(transcriptionResult) && match == -1) {
+    if (!result.isFinal  && !this._phraseList.includes(transcriptionResult) && !shouldKeepMatch) {
       this._possible_result = transcriptionResult;
       console.log('not good enough yet transcriptionResult: ' + transcriptionResult);
       return;
@@ -554,16 +571,14 @@ class Scratch3SpeechBlocks {
 
 
  	  var resolve = this._speechList[0];
-    if (this.match_result) {
-      this.current_utterance = this.match_result;
+    if (matchResult) {
+      this._currentUtterance = matchResult;
     } else {
-      this.current_utterance = transcriptionResult;
+      this._currentUtterance = transcriptionResult;
     }
-    // reset match_result.
-    this.match_result = null;
 
     this.temp_speech = transcriptionResult;
- 	  console.log('current utterance set to: ' + this.current_utterance);
+ 	  console.log('current utterance set to: ' + this._currentUtterance);
  	  for (var i = 0; i < this._speechList.length; i++) {
   	  var resFn = this._speechList[i];
   	  resFn();
@@ -587,7 +602,7 @@ class Scratch3SpeechBlocks {
  }
 
  _computeMatch(text, pattern) {
-   //var text = this._phrase_list.join(' ');
+   //var text = this._phraseList.join(' ');
 
    // Don't bother matching if any are null.
    if (!pattern || !text) {
@@ -770,6 +785,9 @@ class Scratch3SpeechBlocks {
   }
 
     listenAndWait(args) {
+      // look into the timing of when to start the sound.  There currently seems
+      // to be some lag between when the sound starts and when the socket message
+      // callback is received.
      return this._playSound(this._startSoundBuffer).then(() => {
          this._showIndicator();
           this._scanBlocksForPhraseList();
@@ -817,7 +835,7 @@ class Scratch3SpeechBlocks {
 
   // Reporter for the last heard phrase/utterance.
   getSpeech(args) {
-    return this.current_utterance;
+    return this._currentUtterance;
   }
 
 
