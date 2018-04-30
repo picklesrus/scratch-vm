@@ -120,8 +120,6 @@ class Scratch3SpeechBlocks {
         this._startNextListening = this._startNextListening.bind(this);
         this._resetActiveListening = this._resetActiveListening.bind(this);
 
-
-        this.runtime.on('TRANSCRIPTION', this._onTranscription.bind(this));
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
     }
 
@@ -774,16 +772,11 @@ class Scratch3SpeechBlocks {
         return this._speechMatches(args.PHRASE, this.temp_speech);
     }
 
-    _showIndicator () {
-        console.log('i should show a thing');
-    }
-
     listenAndWait (args) {
         // look into the timing of when to start the sound.  There currently seems
         // to be some lag between when the sound starts and when the socket message
         // callback is received.
         return this._playSound(this._startSoundBuffer).then(() => {
-            this._showIndicator();
             this._scanBlocksForPhraseList();
             this.temp_speech = '';
             const speechPromise = new Promise(resolve => {
