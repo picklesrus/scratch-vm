@@ -62,70 +62,68 @@ class Scratch3SpeechBlocks {
         // '' at the beginning of the listen to '<transcription value' at the end.
         this.temp_speech = null;
 
-    /**
-     * The list of queued `resolve` callbacks for speech'.
-     * @type {!Array}
-     */
-    // Note. This a list because each block used to have its own chance to listen
-    // e.g. each block listenend for an utterance.  I've switched it back so that
-    // if two listen blocks try to start running at the same time,
-    // there is only 1 utterance detected
-    this._speechList = [];
+        /**
+         * The list of queued `resolve` callbacks for speech'.
+         * @type {!Array}
+         */
+        // Note. This a list because each block used to have its own chance to listen
+        // e.g. each block listenend for an utterance.  I've switched it back so that
+        // if two listen blocks try to start running at the same time,
+        // there is only 1 utterance detected
+        this._speechList = [];
 
-    this._alreadyListening = false;
+        this._alreadyListening = false;
 
-    this._speechTimeout = null;
-    this._speechTimeoutResponseTimeout = null;
+        this._speechTimeout = null;
+        this._speechTimeoutResponseTimeout = null;
 
-    // The ScriptProcessorNode hooked up to the audio context.
-    this._scriptNode = null;
+        // The ScriptProcessorNode hooked up to the audio context.
+        this._scriptNode = null;
 
-    // The socket to send microphone data over.
-    this._socket = null;
-    // The AudioContext used to manage the microphone
-    this._context = null;
-    // MediaStreamAudioSourceNode to handle microphone data.
-    this._sourceNode = null;
+        // The socket to send microphone data over.
+        this._socket = null;
+        // The AudioContext used to manage the microphone
+        this._context = null;
+        // MediaStreamAudioSourceNode to handle microphone data.
+        this._sourceNode = null;
 
-    // A Promise whose fulfillment handler receives a MediaStream object when the microphone has been obtained.
-    this._audioPromise = null;
+        // A Promise whose fulfillment handler receives a MediaStream object when the microphone has been obtained.
+        this._audioPromise = null;
 
-    // Audio buffers for sounds to indicate that listending has started and ended.
-    this._startSoundBuffer = null;
-    this._endSoundBuffer = null;
-
-    // Defaults.
-    // Redefine these in your program to override the defaults.
-
-    // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
-    this.Match_Threshold = 0.3;
-    // How far to search for a match (0 = exact location, 1000+ = broad match).
-    // A match this many characters away from the expected location will add
-    // 1.0 to the score (0.0 is a perfect match).
-    this.Match_Distance = 1000;
-
-    // The number of bits in an int.
-    this.Match_MaxBits = 32;
-    this._loadUISounds();
-
-    // Come back and figure out which of these I really need.
-    this.startRecording = this.startRecording.bind(this);
-    this._newWebsocket = this._newWebsocket.bind(this);
-    this._newSocketCallback = this._newSocketCallback.bind(this);
-    this._setupSocketCallback = this._setupSocketCallback.bind(this);
-    this._socketMessageCallback = this._socketMessageCallback.bind(this);
-    this._startByteStream = this._startByteStream.bind(this);
-    this._processAudioCallback = this._processAudioCallback.bind(this);
-    this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
-    this._timeOutListening = this._timeOutListening.bind(this);
-    this._timeOutWaitingforFinal = this._timeOutWaitingforFinal.bind(this);
-    this._startNextListening = this._startNextListening.bind(this);
-    this._resetActiveListening = this._resetActiveListening.bind(this);
+        // Audio buffers for sounds to indicate that listending has started and ended.
+        this._startSoundBuffer = null;
+        this._endSoundBuffer = null;
 
 
-    this.runtime.on('TRANSCRIPTION', this._onTranscription.bind(this));
-    this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
-  }
+        // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
+        this.Match_Threshold = 0.3;
+        // How far to search for a match (0 = exact location, 1000+ = broad match).
+        // A match this many characters away from the expected location will add
+        // 1.0 to the score (0.0 is a perfect match).
+        this.Match_Distance = 1000;
+
+        // The number of bits in an int.
+        this.Match_MaxBits = 32;
+        this._loadUISounds();
+
+        // Come back and figure out which of these I really need.
+        this.startRecording = this.startRecording.bind(this);
+        this._newWebsocket = this._newWebsocket.bind(this);
+        this._newSocketCallback = this._newSocketCallback.bind(this);
+        this._setupSocketCallback = this._setupSocketCallback.bind(this);
+        this._socketMessageCallback = this._socketMessageCallback.bind(this);
+        this._startByteStream = this._startByteStream.bind(this);
+        this._processAudioCallback = this._processAudioCallback.bind(this);
+        this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
+        this._timeOutListening = this._timeOutListening.bind(this);
+        this._timeOutWaitingforFinal = this._timeOutWaitingforFinal.bind(this);
+        this._startNextListening = this._startNextListening.bind(this);
+        this._resetActiveListening = this._resetActiveListening.bind(this);
+
+
+        this.runtime.on('TRANSCRIPTION', this._onTranscription.bind(this));
+        this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
+    }
 
   //  MATCH FUNCTIONS
 
@@ -363,81 +361,79 @@ class Scratch3SpeechBlocks {
                 }
             });
     }
-	/**
-   * The key to load & store a target's speech-related state.
-   * @type {string}
-   */
-  static get STATE_KEY () {
-    return 'Scratch.speech';
-  }
-
-  // Resets all things related to listening. Called on Red Stop sign button.
-  //   - suspends audio context
-  //   - closes socket with speech socket server
-  //   - clears out any remaining speech blocks that think they need to run.
-  _resetListening() {
-    console.log("_resetListening.");
-    // Check whether context has been set up yet. This can get called before
- 	  // We ever tried to listen for anything. e.g. on Green Flag click.
- 	  if (this._context) {
- 		  this._context.suspend.bind(this._context);
- 	  }
- 	  this._closeWebsocket();
- 	  if (this._speechList.length > 0) {
- 		  console.log('resetting so resolving everything');
-   	    for (var i = 0; i < this._speechList.length; i++) {
-	  	    var resFn = this._speechList[i];
-	  	    resFn();
- 	  	  }
- 		  this._speechList = [];  // TODO does this actually resolve anything?
- 	  }
-  }
-
-	// Called to reset a single instance of listening.  If there are utterances
-	// expected in the queue, kick off the next one.
-  _resetActiveListening() {
-    console.log('resetting active listening');
-    if (this._speechList.length > 0) {
-      var resolve = this._speechList.shift();
-   		// Pause the mic and close the web socket.
-      this._context.suspend.bind(this._context);
-      this._closeWebsocket();
-      resolve();
-      for (var i = 0; i < this._speechList.length; i++) {
-        var resFn = this._speechList[i];
-        resFn();
-      }
-
-   	  this._speechList = []; // reset list. CHECK WITH PROMISE IS RESOLVED
-   	  this._alreadyListening = false;
+  
+    /**
+     * The key to load & store a target's speech-related state.
+     * @type {string}
+     */
+    static get STATE_KEY () {
+        return 'Scratch.speech';
     }
-  }
 
-  // Callback when ready to setup a new socket connection with speech server.
-  _newSocketCallback(resolve, reject) {
-    console.log('creating a new web socket');
-  	// TODO: Stop hardcoding localhost and port
-    //var server = 'ws://scratch-speech-prod.us-east-1.elasticbeanstalk.com';
-    //var server = 'ws://localhost:8080';
-    var server = 'wss://speech.scratch.mit.edu';
-    this._socket = new WebSocket(server);
-    this._socket.addEventListener('open', resolve);
-    this._socket.addEventListener('error', reject);
-  }
-
-  _stopTranscription() {
-    // what should actually get stopped here???
-    if (this._socket) {
-      this._context.suspend.bind(this._context);
-      if (this._scriptNode) {
-        this._scriptNode.disconnect();
-      }
-      this._socket.send('stopTranscription');
-      // Give it a couple seconds to response before giving up and assuming nothing.
-      this._speechTimeoutResponseTimeout = setTimeout(this._timeOutWaitingforFinal, 3000);
-
+    // Resets all things related to listening. Called on Red Stop sign button.
+    //   - suspends audio context
+    //   - closes socket with speech socket server
+    //   - clears out any remaining speech blocks that think they need to run.
+    _resetListening () {
+        console.log('_resetListening.');
+        // Check whether context has been set up yet. This can get called before
+        // We ever tried to listen for anything. e.g. on Green Flag click.
+        if (this._context) {
+            this._context.suspend.bind(this._context);
+        }
+        this._closeWebsocket();
+        if (this._speechList.length > 0) {
+            console.log('resetting so resolving everything');
+            for (let i = 0; i < this._speechList.length; i++) {
+                let resFn = this._speechList[i];
+                resFn();
+            }
+            this._speechList = []; // TODO does this actually resolve anything?
+        }
     }
-  }
+
+    // Called to reset a single instance of listening.  If there are utterances
+    // expected in the queue, kick off the next one.
+    _resetActiveListening () {
+        console.log('resetting active listening');
+        if (this._speechList.length > 0) {
+            const resolve = this._speechList.shift();
+            // Pause the mic and close the web socket.
+            this._context.suspend.bind(this._context);
+            this._closeWebsocket();
+            resolve();
+            for (let i = 0; i < this._speechList.length; i++) {
+                let resFn = this._speechList[i];
+                resFn();
+            }
+            this._speechList = []; // reset list. CHECK WITH PROMISE IS RESOLVED
+            this._alreadyListening = false;
+        }
+    }
+
+    // Callback when ready to setup a new socket connection with speech server.
+    _newSocketCallback (resolve, reject) {
+        console.log('creating a new web socket');
+        // TODO: Stop hardcoding localhost and port
+        // var server = 'ws://localhost:8080';
+        const server = 'wss://speech.scratch.mit.edu';
+        this._socket = new WebSocket(server);
+        this._socket.addEventListener('open', resolve);
+        this._socket.addEventListener('error', reject);
+    }
+
+    _stopTranscription () {
+        // what should actually get stopped here???
+        if (this._socket) {
+            this._context.suspend.bind(this._context);
+            if (this._scriptNode) {
+                this._scriptNode.disconnect();
+            }
+            this._socket.send('stopTranscription');
+            // Give it a couple seconds to response before giving up and assuming nothing.
+            this._speechTimeoutResponseTimeout = setTimeout(this._timeOutWaitingforFinal, 3000);
+        }
+    }
 
   _timeOutWaitingforFinal() {
     console.log('timeing out waiting for last response');
