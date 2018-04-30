@@ -620,13 +620,13 @@ class Scratch3SpeechBlocks {
 
     // Disconnect all the audio stuff on the client.
     _suspendListening () {
- 	  console.log('suspending listenting');
- 	  // this gets called on green flag when context may not exist yet.
- 	  if (this._context) {
- 	  	  console.log('suspending audio context.');
-   	  this._context.suspend.bind(this._context);
- 		  this._scriptNode.disconnect();
- 	  }
+        console.log('suspending listenting');
+        // this gets called on green flag when context may not exist yet.
+        if (this._context) {
+            console.log('suspending audio context.');
+            this._context.suspend.bind(this._context);
+            this._scriptNode.disconnect();
+        }
         if (this._sourceNode) this._sourceNode.disconnect();
     }
 
@@ -634,23 +634,24 @@ class Scratch3SpeechBlocks {
     // server. Even the init message and the "end of utterance message";
     _onTranscriptionFromServer (e) {
         console.log(`transcription ${e.data}`);
-        if (e.data == 'got the configuration message') {
-    	console.log('received initial response from socket server.');
-    	return;
-        } else if (e.data == 'end of utterance') {
-    	// End of utterance is a message we get, but it doesn't mean we've got
-    	// the final results yet.  So for now, ignore?
-    	console.log('Got an end of utterance message. Ignoring it though.');
-    	return;
+        if (e.data === 'got the configuration message') {
+            console.log('received initial response from socket server.');
+            return;
+        } else if (e.data === 'end of utterance') {
+            // End of utterance is a message we get, but it doesn't mean we've got
+            // the final results yet.  So for now, ignore?
+            console.log('Got an end of utterance message. Ignoring it though.');
+            return;
         }
 
         // This is an actual transcription result.
+        let result = null;
         try {
-    	var result = JSON.parse(e.data);
+            result = JSON.parse(e.data);
         } catch (ex) {
-    	console.log(`problem parsing json. continuing: ${ex}`);
-    	// TODO: stop stuff?
-    	return;
+            console.log(`problem parsing json. continuing: ${ex}`);
+            // TODO: stop stuff?
+            return;
         }
         // Throw a transcription event that we'll catch later and decice whether to
         // resolve the promise.
@@ -661,14 +662,14 @@ class Scratch3SpeechBlocks {
     // Called when we have data from the Microphone. Takes that data and ships
     // it off to the speech server for transcription.
     _processAudioCallback (e) {
-        if (this._socket.readyState == WebSocket.CLOSED ||
-        this._socket.readyState == WebSocket.CLOSING) {
+        if (this._socket.readyState === WebSocket.CLOSED ||
+        this._socket.readyState === WebSocket.CLOSING) {
             console.log(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
             return;
         }
         const MAX_INT = Math.pow(2, 16 - 1) - 1;
         const floatSamples = e.inputBuffer.getChannelData(0);
-   	// The samples are floats in range [-1, 1]. Convert to 16-bit signed
+        // The samples are floats in range [-1, 1]. Convert to 16-bit signed
         // integer.
         this._socket.send(Int16Array.from(floatSamples.map(n => n * MAX_INT)));
     }
@@ -686,36 +687,35 @@ class Scratch3SpeechBlocks {
     // that data to the speech server.
     startRecording () {
         if (this._context) {
-  	  console.log('Already did the setup. Trying to resume.');
-  	  this._context.resume.bind(this._context);
-  	  this._newWebsocket();
-  	  return;
-  	}
-	 	console.log('starting recording');
-  	// All the setup for reading from microphone.
-	 	this._context = new AudioContext();
-	 	// TODO: put these constants elsewhere
-	 	const SAMPLE_RATE = 16000;
+            console.log('Already did the setup. Trying to resume.');
+            this._context.resume.bind(this._context);
+            this._newWebsocket();
+            return;
+        }
+        console.log('starting recording');
+        // All the setup for reading from microphone.
+        this._context = new AudioContext();
+        // TODO: put these constants elsewhere
+        const SAMPLE_RATE = 16000;
         const SAMPLE_SIZE = 16;
         this._audioPromise = navigator.mediaDevices.getUserMedia({
-	      audio: {
-	        echoCancellation: true,
-	        channelCount: 1,
-	        sampleRate: {
-	          ideal: SAMPLE_RATE
-	        },
-	        sampleSize: SAMPLE_SIZE
-	      }
-	    });
+            audio: {
+                echoCancellation: true,
+                channelCount: 1,
+                sampleRate: {
+                    ideal: SAMPLE_RATE
+                },
+                sampleSize: SAMPLE_SIZE
+            }
+        });
         const tempContext = this._context;
         let analyser;
-	    this._audioPromise.then(micStream => {
-	      const microphone = tempContext.createMediaStreamSource(micStream);
-	      analyser = tempContext.createAnalyser();
-	      microphone.connect(analyser);
-	    }).catch(console.log.bind(console));
-
-	  this.initWebSocket();
+        this._audioPromise.then(micStream => {
+            const microphone = tempContext.createMediaStreamSource(micStream);
+            analyser = tempContext.createAnalyser();
+            microphone.connect(analyser);
+        }).catch(console.log.bind(console));
+        this.initWebSocket();
     }
 
 
@@ -762,7 +762,7 @@ class Scratch3SpeechBlocks {
         input = input.trim();
 
         const match = this._computeMatch(text, pattern);
-        return match != -1;
+        return match !== -1;
     // if (haystack && haystack.indexOf(input) != -1) {
     //   return true;
     // }
@@ -790,7 +790,7 @@ class Scratch3SpeechBlocks {
                 const listeningInProgress = this._speechList.length > 0;
                 this._speechList.push(resolve);
                 if (!listeningInProgress) {
-             	this._startNextListening();
+                    this._startNextListening();
                 }
             });
             return speechPromise.then(() => this._playSound(this._endSoundBuffer));
@@ -821,7 +821,7 @@ class Scratch3SpeechBlocks {
             // 10 second timeout for listening.
             this._speechTimeout = setTimeout(this._timeOutListening, 10000);
         } else {
-      	console.log('trying to start listening but for no reason?');
+            console.log('trying to start listening but for no reason?');
         }
     }
 
@@ -829,7 +829,5 @@ class Scratch3SpeechBlocks {
     getSpeech (args) {
         return this._currentUtterance;
     }
-
-
 }
 module.exports = Scratch3SpeechBlocks;
