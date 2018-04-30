@@ -509,23 +509,23 @@ class Scratch3SpeechBlocks {
     // Called when we're done listening and want to close the web socket server.
     // Stops listening to the mic and whatnot as well.
     _closeWebsocket () {
-	  console.log('closing socket');
-	  // This is called on green flag to reset things that may never have existed
-	  // in the first place. Do a bunch of checks.
+        console.log('closing socket');
+        // This is called on green flag to reset things that may never have existed
+        // in the first place. Do a bunch of checks.
         if (this._scriptNode) {
-  	  this._scriptNode.disconnect();
+            this._scriptNode.disconnect();
         }
         if (this._sourceNode) this._sourceNode.disconnect();
         if (this._socket && this._socket.readyState === this._socket.OPEN) {
-    	console.log('sending close socket message');
-    	this._socket.close();
+            console.log('sending close socket message');
+            this._socket.close();
         }
     }
 
     // Called when a listen block times out without detecting an end of
     // utterance message during transcription.
     _timeOutListening () {
- 	  console.log('timeout fired. Resetting listening');
+        console.log('timeout fired. Resetting listening');
         // this._currentUtterance = '';  // should this be NULL OR empty?
         //  this.temp_speech = ''; // should this be null or empty?
         //    this._resetActiveListening();
@@ -536,9 +536,9 @@ class Scratch3SpeechBlocks {
     // When we get a transcription result, save the result to _currentUtterance,
     // resolve the current promise.
     _onTranscription (result) {
- 	  let transcriptionResult = result.alternatives[0].transcript;
+        let transcriptionResult = result.alternatives[0].transcript;
         // Confidence seems to be 0 when a result has isFinal: true
- 	  transcriptionResult = Cast.toString(transcriptionResult).toLowerCase();
+        transcriptionResult = Cast.toString(transcriptionResult).toLowerCase();
         // facilitate matches by removing some punctuation: . ? !
         transcriptionResult = transcriptionResult.replace(/[.?!]/g, '');
         // trim off any white space
@@ -550,12 +550,12 @@ class Scratch3SpeechBlocks {
         let matchResult = null;
         const match = this._computeMatch(transcriptionResult, phrases);
 
-        if (match != -1) {
+        if (match !== -1) {
             console.log('partial match.');
             matchResult = transcriptionResult.substring(match, match + phrases.length);
             console.log(`match result: ${matchResult}`);
         }
-        const shouldKeepMatch = match != -1 && result.stability > .85; // don't keep matches if the stability is low.
+        const shouldKeepMatch = match !== -1 && result.stability > .85; // don't keep matches if the stability is low.
 
         // if (!result.isFinal && result.stability < .85 && !this._phraseList.includes(transcriptionResult) && match == -1) {
         if (!result.isFinal && !this._phraseList.includes(transcriptionResult) && !shouldKeepMatch) {
@@ -565,7 +565,7 @@ class Scratch3SpeechBlocks {
         }
 
 
- 	  const resolve = this._speechList[0];
+        const resolve = this._speechList[0];
         if (matchResult) {
             this._currentUtterance = matchResult;
         } else {
@@ -573,18 +573,17 @@ class Scratch3SpeechBlocks {
         }
 
         this.temp_speech = transcriptionResult;
- 	  console.log(`current utterance set to: ${this._currentUtterance}`);
- 	  for (let i = 0; i < this._speechList.length; i++) {
-  	  const resFn = this._speechList[i];
-  	  resFn();
- 	  }
+        console.log(`current utterance set to: ${this._currentUtterance}`);
+        for (let i = 0; i < this._speechList.length; i++) {
+            const resFn = this._speechList[i];
+            resFn();
+        }
         // this._playSound(this._endSoundBuffer);
- 	  // Pause the mic and close the web socket.
- 	  this._context.suspend.bind(this._context);
- 	  this._closeWebsocket();
-
- 	  this._speechList = [];
- 	  this._alreadyListening = false;
+        // Pause the mic and close the web socket.
+        this._context.suspend.bind(this._context);
+        this._closeWebsocket();
+        this._speechList = [];
+        this._alreadyListening = false;
         if (this._speechTimeout) {
             clearTimeout(this._speechTimeout);
             this._speechTimeout = null;
