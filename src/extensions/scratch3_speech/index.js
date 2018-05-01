@@ -18,6 +18,12 @@ const iconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_whi
 const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_grey600_24dp.png';
 
 /**
+ * The amount of time to wait between when we stop sending speech data to the server and when
+ * we expect the transcription result marked with isFinal: true to come back from the server.
+ * @type {int}
+ */
+const finalResponseTimeoutDurationMs = 3000;
+/**
  * The start and stop sounds, loaded as static assets.
  * @type {object}
  */
@@ -73,7 +79,7 @@ class Scratch3SpeechBlocks {
         this._speechList = [];
 
         this._speechTimeout = null;
-        this._speechTimeoutResponseTimeout = null;
+        this._speechFinalResponseTimeout = null;
 
         // The ScriptProcessorNode hooked up to the audio context.
         this._scriptNode = null;
@@ -114,7 +120,6 @@ class Scratch3SpeechBlocks {
         this._processAudioCallback = this._processAudioCallback.bind(this);
         this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
         this._timeOutListening = this._timeOutListening.bind(this);
-        this._timeOutWaitingforFinal = this._timeOutWaitingforFinal.bind(this);
         this._startNextListening = this._startNextListening.bind(this);
         this._resetActiveListening = this._resetActiveListening.bind(this);
 
@@ -426,14 +431,10 @@ class Scratch3SpeechBlocks {
             }
             this._socket.send('stopTranscription');
             // Give it a couple seconds to response before giving up and assuming nothing.
-            this._speechTimeoutResponseTimeout = setTimeout(this._timeOutWaitingforFinal, 3000);
+            this._speechFinalResponseTimeout = setTimeout(this._resetActiveListening, finalResponseTimeoutDurationMs);
         }
     }
 
-    _timeOutWaitingforFinal () {
-        console.log('timeing out waiting for last response');
-        this._resetActiveListening();
-    }
     // Callback to handle initial setting up of a socket.
     // Currently we send a setup message (only contains sample rate) but might
     // be useful to send more data so we can do quota stuff.
@@ -585,9 +586,9 @@ class Scratch3SpeechBlocks {
             this._speechTimeout = null;
         }
         // timeout for waiting for last result.
-        if (this._speechTimeoutResponseTimeout) {
-            clearTimeout(this._speechTimeoutResponseTimeout);
-            this._speechTimeoutResponseTimeout = null;
+        if (this._speechFinalResponseTimeout) {
+            clearTimeout(this._speechFinalResponseTimeout);
+            this._speechFinalResponseTimeout = null;
         }
     }
 
