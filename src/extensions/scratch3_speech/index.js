@@ -23,6 +23,14 @@ const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic
  * @type {int}
  */
 const finalResponseTimeoutDurationMs = 3000;
+
+/**
+ * The amount of time to wait between when we stop sending speech data to the server and when
+ * we expect the transcription result marked with isFinal: true to come back from the server.
+ * @type {int}
+ */
+const listenAndWaitBlockTimeoutMs = 10000;
+
 /**
  * The start and stop sounds, loaded as static assets.
  * @type {object}
@@ -71,14 +79,20 @@ class Scratch3SpeechBlocks {
         /**
          * The list of queued `resolve` callbacks for speech'.
          * We only listen to for one utterance at a time.  We may encounter multiple
-         * 'Listen and wait' blocks telling us to start listening. Once one starts
+         * 'Listen and wait' blocks that tell us to start listening. If one starts
          * and hasn't receieved results back yet, when we encounter more, any further ones
          * will all resolve when we get the next acceptable transcription result back.
          * @type {!Array}
          */
         this._speechPromises = [];
 
-        this._speechTimeout = null;
+        /**
+         * The id of the timeout that will run if we start listening and don't get any
+         * transcription results back. e.g. because we didn't hear anything.
+         * @type {number}
+         */
+        this._speechTimeoutId = null;
+
         this._speechFinalResponseTimeout = null;
 
         // The ScriptProcessorNode hooked up to the audio context.
@@ -374,7 +388,7 @@ class Scratch3SpeechBlocks {
     /**
      * Resolves all the speech promises we've accumulated so far and empties out the list.
      */
-    _resolveSpeechPromies () {
+    _resolveSpeechPromises () {
         console.log('resetting ' + this._speechPromises.length + ' promises');
         for (let i = 0; i < this._speechPromises.length; i++) {
             const resFn = this._speechPromises[i];
@@ -397,7 +411,7 @@ class Scratch3SpeechBlocks {
         // TODO: test multiple listen and wait blocks + stop button.
         // I think this messes up the socket.
         this._closeWebsocket();
-        this._resolveSpeechPromies();
+        this._resolveSpeechPromises();
     }
 
     // Called to reset a single instance of listening.  If there are utterances
@@ -578,9 +592,10 @@ class Scratch3SpeechBlocks {
         // Pause the mic and close the web socket.
         this._context.suspend.bind(this._context);
         this._closeWebsocket();
-        if (this._speechTimeout) {
-            clearTimeout(this._speechTimeout);
-            this._speechTimeout = null;
+        // We got results so don't bother with the timeout.
+        if (this._speechTimeoutId) {
+            clearTimeout(this._speechTimeoutId);
+            this._speechTimeoutId = null;
         }
         // timeout for waiting for last result.
         if (this._speechFinalResponseTimeout) {
@@ -804,7 +819,7 @@ class Scratch3SpeechBlocks {
         if (this._speechPromises.length > 0) {
             this.startRecording();
             // 10 second timeout for listening.
-            this._speechTimeout = setTimeout(this._timeOutListening, 10000);
+            this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
         } else {
             console.log('trying to start listening but for no reason?');
         }
