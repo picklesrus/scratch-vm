@@ -424,7 +424,7 @@ class Scratch3SpeechBlocks {
             // Pause the mic and close the web socket.
             this._context.suspend.bind(this._context);
             this._closeWebsocket();
-            this.resolveSpeechPromises();
+            this._resolveSpeechPromises();
         }
     }
 
@@ -587,7 +587,7 @@ class Scratch3SpeechBlocks {
 
         this.temp_speech = transcriptionResult;
         console.log(`current utterance set to: ${this._currentUtterance}`);
-        this._resolveSpeechPromies();
+        this._resolveSpeechPromises();
         // this._playSound(this._endSoundBuffer);
         // Pause the mic and close the web socket.
         this._context.suspend.bind(this._context);
