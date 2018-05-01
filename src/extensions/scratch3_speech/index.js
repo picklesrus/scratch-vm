@@ -72,8 +72,6 @@ class Scratch3SpeechBlocks {
         // there is only 1 utterance detected
         this._speechList = [];
 
-        this._alreadyListening = false;
-
         this._speechTimeout = null;
         this._speechTimeoutResponseTimeout = null;
 
@@ -405,7 +403,6 @@ class Scratch3SpeechBlocks {
                 resFn();
             }
             this._speechList = []; // reset list. CHECK WITH PROMISE IS RESOLVED
-            this._alreadyListening = false;
         }
     }
 
@@ -583,7 +580,6 @@ class Scratch3SpeechBlocks {
         this._context.suspend.bind(this._context);
         this._closeWebsocket();
         this._speechList = [];
-        this._alreadyListening = false;
         if (this._speechTimeout) {
             clearTimeout(this._speechTimeout);
             this._speechTimeout = null;
@@ -809,7 +805,6 @@ class Scratch3SpeechBlocks {
         console.log('start listening');
         if (this._speechList.length > 0) {
             this.startRecording();
-            this._alreadyListening = true;
             // 10 second timeout for listening.
             this._speechTimeout = setTimeout(this._timeOutListening, 10000);
         } else {
