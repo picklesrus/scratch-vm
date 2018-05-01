@@ -70,13 +70,12 @@ class Scratch3SpeechBlocks {
 
         /**
          * The list of queued `resolve` callbacks for speech'.
+         * We only listen to for one utterance at a time.  We may encounter multiple
+         * 'Listen and wait' blocks telling us to start listening, but once one starts and we
+         * encounter another, it will receieve the same transcription result/utterance.
          * @type {!Array}
          */
-        // Note. This a list because each block used to have its own chance to listen
-        // e.g. each block listenend for an utterance.  I've switched it back so that
-        // if two listen blocks try to start running at the same time,
-        // there is only 1 utterance detected
-        this._speechList = [];
+        this._speechPromises = [];
 
         this._speechTimeout = null;
         this._speechFinalResponseTimeout = null;
@@ -383,13 +382,13 @@ class Scratch3SpeechBlocks {
             this._context.suspend.bind(this._context);
         }
         this._closeWebsocket();
-        if (this._speechList.length > 0) {
+        if (this._speechPromises.length > 0) {
             console.log('resetting so resolving everything');
-            for (let i = 0; i < this._speechList.length; i++) {
-                const resFn = this._speechList[i];
+            for (let i = 0; i < this._speechPromises.length; i++) {
+                const resFn = this._speechPromises[i];
                 resFn();
             }
-            this._speechList = []; // TODO does this actually resolve anything?
+            this._speechPromises = []; // TODO does this actually resolve anything?
         }
     }
 
@@ -397,17 +396,17 @@ class Scratch3SpeechBlocks {
     // expected in the queue, kick off the next one.
     _resetActiveListening () {
         console.log('resetting active listening');
-        if (this._speechList.length > 0) {
-            const resolve = this._speechList.shift();
+        if (this._speechPromises.length > 0) {
+            const resolve = this._speechPromises.shift();
             // Pause the mic and close the web socket.
             this._context.suspend.bind(this._context);
             this._closeWebsocket();
             resolve();
-            for (let i = 0; i < this._speechList.length; i++) {
-                const resFn = this._speechList[i];
+            for (let i = 0; i < this._speechPromises.length; i++) {
+                const resFn = this._speechPromises[i];
                 resFn();
             }
-            this._speechList = []; // reset list. CHECK WITH PROMISE IS RESOLVED
+            this._speechPromises = []; // reset list. CHECK WITH PROMISE IS RESOLVED
         }
     }
 
@@ -563,7 +562,7 @@ class Scratch3SpeechBlocks {
         }
 
 
-        const resolve = this._speechList[0];
+        const resolve = this._speechPromises[0];
         if (matchResult) {
             this._currentUtterance = matchResult;
         } else {
@@ -572,15 +571,15 @@ class Scratch3SpeechBlocks {
 
         this.temp_speech = transcriptionResult;
         console.log(`current utterance set to: ${this._currentUtterance}`);
-        for (let i = 0; i < this._speechList.length; i++) {
-            const resFn = this._speechList[i];
+        for (let i = 0; i < this._speechPromises.length; i++) {
+            const resFn = this._speechPromises[i];
             resFn();
         }
         // this._playSound(this._endSoundBuffer);
         // Pause the mic and close the web socket.
         this._context.suspend.bind(this._context);
         this._closeWebsocket();
-        this._speechList = [];
+        this._speechPromises = [];
         if (this._speechTimeout) {
             clearTimeout(this._speechTimeout);
             this._speechTimeout = null;
@@ -776,8 +775,8 @@ class Scratch3SpeechBlocks {
             this._scanBlocksForPhraseList();
             this.temp_speech = '';
             const speechPromise = new Promise(resolve => {
-                const listeningInProgress = this._speechList.length > 0;
-                this._speechList.push(resolve);
+                const listeningInProgress = this._speechPromises.length > 0;
+                this._speechPromises.push(resolve);
                 if (!listeningInProgress) {
                     this._startNextListening();
                 }
@@ -804,7 +803,7 @@ class Scratch3SpeechBlocks {
     // Kick off listening for the next block waiting in the queue.
     _startNextListening () {
         console.log('start listening');
-        if (this._speechList.length > 0) {
+        if (this._speechPromises.length > 0) {
             this.startRecording();
             // 10 second timeout for listening.
             this._speechTimeout = setTimeout(this._timeOutListening, 10000);
