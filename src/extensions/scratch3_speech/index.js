@@ -71,8 +71,9 @@ class Scratch3SpeechBlocks {
         /**
          * The list of queued `resolve` callbacks for speech'.
          * We only listen to for one utterance at a time.  We may encounter multiple
-         * 'Listen and wait' blocks telling us to start listening, but once one starts and we
-         * encounter another, it will receieve the same transcription result/utterance.
+         * 'Listen and wait' blocks telling us to start listening. Once one starts
+         * and hasn't receieved results back yet, when we encounter more, any further ones
+         * will all resolve when we get the next acceptable transcription result back.
          * @type {!Array}
          */
         this._speechPromises = [];
@@ -370,6 +371,18 @@ class Scratch3SpeechBlocks {
         return 'Scratch.speech';
     }
 
+    /**
+     * Resolves all the speech promises we've accumulated so far and empties out the list.
+     */
+    _resolveSpeechPromies () {
+        console.log('resetting ' + this._speechPromises.length + ' promises');
+        for (let i = 0; i < this._speechPromises.length; i++) {
+            const resFn = this._speechPromises[i];
+            resFn();
+        }
+        this._speechPromises = [];
+    }
+
     // Resets all things related to listening. Called on Red Stop sign button.
     //   - suspends audio context
     //   - closes socket with speech socket server
@@ -381,32 +394,23 @@ class Scratch3SpeechBlocks {
         if (this._context) {
             this._context.suspend.bind(this._context);
         }
+        // TODO: test multiple listen and wait blocks + stop button.
+        // I think this messes up the socket.
         this._closeWebsocket();
-        if (this._speechPromises.length > 0) {
-            console.log('resetting so resolving everything');
-            for (let i = 0; i < this._speechPromises.length; i++) {
-                const resFn = this._speechPromises[i];
-                resFn();
-            }
-            this._speechPromises = []; // TODO does this actually resolve anything?
-        }
+        this._resolveSpeechPromies();
     }
 
     // Called to reset a single instance of listening.  If there are utterances
     // expected in the queue, kick off the next one.
+    // TODO figure out if/why this is different from resetListening.
     _resetActiveListening () {
         console.log('resetting active listening');
+        // TODO: Do I need to test for this?
         if (this._speechPromises.length > 0) {
-            const resolve = this._speechPromises.shift();
             // Pause the mic and close the web socket.
             this._context.suspend.bind(this._context);
             this._closeWebsocket();
-            resolve();
-            for (let i = 0; i < this._speechPromises.length; i++) {
-                const resFn = this._speechPromises[i];
-                resFn();
-            }
-            this._speechPromises = []; // reset list. CHECK WITH PROMISE IS RESOLVED
+            this.resolveSpeechPromises();
         }
     }
 
@@ -561,8 +565,6 @@ class Scratch3SpeechBlocks {
             return;
         }
 
-
-        const resolve = this._speechPromises[0];
         if (matchResult) {
             this._currentUtterance = matchResult;
         } else {
@@ -571,15 +573,11 @@ class Scratch3SpeechBlocks {
 
         this.temp_speech = transcriptionResult;
         console.log(`current utterance set to: ${this._currentUtterance}`);
-        for (let i = 0; i < this._speechPromises.length; i++) {
-            const resFn = this._speechPromises[i];
-            resFn();
-        }
+        this._resolveSpeechPromies();
         // this._playSound(this._endSoundBuffer);
         // Pause the mic and close the web socket.
         this._context.suspend.bind(this._context);
         this._closeWebsocket();
-        this._speechPromises = [];
         if (this._speechTimeout) {
             clearTimeout(this._speechTimeout);
             this._speechTimeout = null;
