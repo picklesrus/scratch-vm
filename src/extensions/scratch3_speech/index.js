@@ -27,6 +27,8 @@ const finalResponseTimeoutDurationMs = 3000;
 /**
  * The amount of time to wait between when we stop sending speech data to the server and when
  * we expect the transcription result marked with isFinal: true to come back from the server.
+ * Currently set to 10sec. This should not exceed the speech api limit (60sec) without redoing how
+ * we stream the microphone data data.
  * @type {int}
  */
 const listenAndWaitBlockTimeoutMs = 10000;
@@ -62,6 +64,7 @@ class Scratch3SpeechBlocks {
 
         /**
          * The most recent transcription result received from the speech API.
+         * This is the value returned by the reporter block.
          * @type {String}
          * @private
          */
@@ -77,7 +80,7 @@ class Scratch3SpeechBlocks {
         this.temp_speech = null;
 
         /**
-         * The list of queued `resolve` callbacks for speech'.
+         * The list of queued `resolve` callbacks for 'Listen and Wait' blocks.
          * We only listen to for one utterance at a time.  We may encounter multiple
          * 'Listen and wait' blocks that tell us to start listening. If one starts
          * and hasn't receieved results back yet, when we encounter more, any further ones
@@ -93,6 +96,11 @@ class Scratch3SpeechBlocks {
          */
         this._speechTimeoutId = null;
 
+        /**
+         * The id of the timeout that will run to wait for after we're done listening but
+         * are still waiting for a potential isFinal:true transcription result to come back.
+         * @type {number}
+         */
         this._speechFinalResponseTimeout = null;
 
         // The ScriptProcessorNode hooked up to the audio context.
@@ -122,7 +130,6 @@ class Scratch3SpeechBlocks {
 
         // The number of bits in an int.
         this.Match_MaxBits = 32;
-        this._loadUISounds();
 
         // Come back and figure out which of these I really need.
         this.startRecording = this.startRecording.bind(this);
@@ -138,6 +145,9 @@ class Scratch3SpeechBlocks {
         this._resetActiveListening = this._resetActiveListening.bind(this);
 
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
+
+        // Load in the start and stop listening indicator sounds.
+        this._loadUISounds();
     }
 
     //  MATCH FUNCTIONS
@@ -387,6 +397,7 @@ class Scratch3SpeechBlocks {
 
     /**
      * Resolves all the speech promises we've accumulated so far and empties out the list.
+     * @private
      */
     _resolveSpeechPromises () {
         console.log('resetting ' + this._speechPromises.length + ' promises');
@@ -478,7 +489,14 @@ class Scratch3SpeechBlocks {
             }
         ));
     }
-
+    
+    /**
+     * Scans all the 'When I hear' hat blocks for each sprite and pulls out the text.  The list
+     * is sent off to the speech recognition server as hints.  This *only* reads the value out of
+     * the hat block shadow.  If a block is dropped on top of the shadow, it is skipped.
+     * @returns {Array} list of strings from the hat blocks in the project.
+     * @private
+     */
     _scanBlocksForPhraseList () {
         const words = [];
         // For each each target, walk through the top level blocks and check whether
@@ -490,13 +508,18 @@ class Scratch3SpeechBlocks {
                     // Grab the text from the hat block's shadow.
                     const inputId = b.inputs.PHRASE.block;
                     const inputBlock = target.blocks.getBlock(inputId);
-                    const word = target.blocks.getBlock(inputId).fields.TEXT.value;
-                    words.push(word);
+                    // Only grab the value from text blocks. This means we'll
+                    // miss some. e.g. values in variables or other reporters.
+                    if (inputBlock.opcode === 'text') {
+                        const word = target.blocks.getBlock(inputId).fields.TEXT.value;
+                        words.push(word);
+                    }
                 }
             });
         });
-        this._phraseList = words;
+        return words;
     }
+
     // Setup listening for socket.
     _socketMessageCallback (e) {
         console.log('socket message callback');
@@ -776,16 +799,27 @@ class Scratch3SpeechBlocks {
     }
 
 
+    /**
+     * An edge triggered hat block to listen for a specific phrase.
+     * @param {object} args - the block arguments.
+     * @return {boolean} true if the phrase matches what was transcribed.
+     */
     whenIHearHat (args) {
         return this._speechMatches(args.PHRASE, this.temp_speech);
     }
 
-    listenAndWait (args) {
+    /**
+     * Start the listening process if it isn't already in progress, playing a sound to indicate
+     * when it starts and stops.
+     * @return {Promise} A promise that will resolve when listening is complete.
+     */
+    listenAndWait () {
         // look into the timing of when to start the sound.  There currently seems
         // to be some lag between when the sound starts and when the socket message
         // callback is received.
         return this._playSound(this._startSoundBuffer).then(() => {
-            this._scanBlocksForPhraseList();
+            // TODO: only do this if listening isn't in progress already?
+            this._phraseList = this._scanBlocksForPhraseList();
             this.temp_speech = '';
             const speechPromise = new Promise(resolve => {
                 const listeningInProgress = this._speechPromises.length > 0;
@@ -818,7 +852,6 @@ class Scratch3SpeechBlocks {
         console.log('start listening');
         if (this._speechPromises.length > 0) {
             this.startRecording();
-            // 10 second timeout for listening.
             this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
         } else {
             console.log('trying to start listening but for no reason?');
