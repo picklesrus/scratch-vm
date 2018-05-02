@@ -132,6 +132,7 @@ class Scratch3SpeechBlocks {
         this.Match_MaxBits = 32;
 
         // Come back and figure out which of these I really need.
+        this._startListening = this._startListening.bind(this);
         this.startRecording = this.startRecording.bind(this);
         this._newWebsocket = this._newWebsocket.bind(this);
         this._newSocketCallback = this._newSocketCallback.bind(this);
@@ -141,7 +142,6 @@ class Scratch3SpeechBlocks {
         this._processAudioCallback = this._processAudioCallback.bind(this);
         this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
         this._timeOutListening = this._timeOutListening.bind(this);
-        this._startNextListening = this._startNextListening.bind(this);
         this._resetActiveListening = this._resetActiveListening.bind(this);
 
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
@@ -817,22 +817,27 @@ class Scratch3SpeechBlocks {
         // look into the timing of when to start the sound.  There currently seems
         // to be some lag between when the sound starts and when the socket message
         // callback is received.
+        // TODO: Only play the sound if listening isn't already in progress?
         return this._playSound(this._startSoundBuffer).then(() => {
-            // TODO: only do this if listening isn't in progress already?
             this._phraseList = this._scanBlocksForPhraseList();
             this.temp_speech = '';
             const speechPromise = new Promise(resolve => {
                 const listeningInProgress = this._speechPromises.length > 0;
                 this._speechPromises.push(resolve);
                 if (!listeningInProgress) {
-                    this._startNextListening();
+                    this._startListening();
                 }
             });
             return speechPromise.then(() => this._playSound(this._endSoundBuffer));
         });
     }
 
-
+    /**
+     * Play the given sound.
+     * @param {}
+     * @returns {Promise}
+     * @private
+     */
     _playSound (buffer) {
         if (this.runtime.audioEngine === null) return;
         const context = this.runtime.audioEngine.audioContext;
@@ -847,19 +852,18 @@ class Scratch3SpeechBlocks {
         });
     }
 
-    // Kick off listening for the next block waiting in the queue.
-    _startNextListening () {
-        console.log('start listening');
-        if (this._speechPromises.length > 0) {
-            this.startRecording();
-            this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
-        } else {
-            console.log('trying to start listening but for no reason?');
-        }
+    /**
+     * Kick off the listening process.
+     * // TODO: maybe fold this into startRecording?
+     * @private
+     */
+    _startListening () {
+        this.startRecording();
+        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
     }
 
     // Reporter for the last heard phrase/utterance.
-    getSpeech (args) {
+    getSpeech () {
         return this._currentUtterance;
     }
 }
