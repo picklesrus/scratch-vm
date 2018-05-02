@@ -133,7 +133,7 @@ class Scratch3SpeechBlocks {
 
         // Come back and figure out which of these I really need.
         this._startListening = this._startListening.bind(this);
-        this.startRecording = this.startRecording.bind(this);
+        this._startRecording = this._startRecording.bind(this);
         this._newWebsocket = this._newWebsocket.bind(this);
         this._newSocketCallback = this._newSocketCallback.bind(this);
         this._setupSocketCallback = this._setupSocketCallback.bind(this);
@@ -712,45 +712,49 @@ class Scratch3SpeechBlocks {
         this._newWebsocket();
     }
 
-    // Called when we're ready to start recording from the microphone and sending
-    // that data to the speech server.
-    startRecording () {
+    /**
+     * Called when we're ready to start recording from the microphone and sending
+     * that data to the speech server. Does all mic setup if it hasn't already been done,
+     * otherwise it resumes.
+     * @private
+     */
+    _startRecording () {
+        // We already setup the audio context, so resume and re-open the socket to send data.
         if (this._context) {
-            console.log('Already did the setup. Trying to resume.');
             this._context.resume.bind(this._context);
             this._newWebsocket();
             return;
         }
-        console.log('starting recording');
+
         // All the setup for reading from microphone.
         this._context = new AudioContext();
-        // TODO: put these constants elsewhere
-        const SAMPLE_RATE = 16000;
-        const SAMPLE_SIZE = 16;
         this._audioPromise = navigator.mediaDevices.getUserMedia({
             audio: {
                 echoCancellation: true,
                 channelCount: 1,
                 sampleRate: {
-                    ideal: SAMPLE_RATE
+                    ideal: 16000
                 },
-                sampleSize: SAMPLE_SIZE
+                sampleSize: 16
             }
         });
+
         const tempContext = this._context;
-        let analyser;
         this._audioPromise.then(micStream => {
             const microphone = tempContext.createMediaStreamSource(micStream);
-            analyser = tempContext.createAnalyser();
+            const analyser = tempContext.createAnalyser();
             microphone.connect(analyser);
-        }).catch(console.log.bind(console));
+        }).catch(e => {
+            log.error(`Problem connecting to microphone:  ${e}`);
+        });
+
         this.initWebSocket();
     }
 
 
     /**
-   * @returns {object} metadata for this extension and its blocks.
-   */
+     * @returns {object} Metadata for this extension and its blocks.
+     */
     getInfo () {
         return {
             id: 'speech',
@@ -858,7 +862,7 @@ class Scratch3SpeechBlocks {
      * @private
      */
     _startListening () {
-        this.startRecording();
+        this._startRecording();
         this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
     }
 
