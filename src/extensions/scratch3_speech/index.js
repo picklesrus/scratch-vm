@@ -39,9 +39,6 @@ const finalResponseTimeoutDurationMs = 3000;
  */
 const listenAndWaitBlockTimeoutMs = 10000;
 
-/** 
- *
- */
 /**
  * The start and stop sounds, loaded as static assets.
  * @type {object}
@@ -434,13 +431,25 @@ class Scratch3SpeechBlocks {
                 }
             });
     }
-  
+
     /**
-     * The key to load & store a target's speech-related state.
-     * @type {string}
+     * Play the given sound.
+     * @param {ArrayBuffer} buffer The audio buffer to play.
+     * @returns {Promise} A promise that resoloves when the sound is done playing.
+     * @private
      */
-    static get STATE_KEY () {
-        return 'Scratch.speech';
+    _playSound (buffer) {
+        if (this.runtime.audioEngine === null) return;
+        const context = this.runtime.audioEngine.audioContext;
+        const bufferSource = context.createBufferSource();
+        bufferSource.buffer = buffer;
+        bufferSource.connect(this.runtime.audioEngine.input);
+        bufferSource.start();
+        return new Promise(resolve => {
+            bufferSource.onended = () => {
+                resolve();
+            };
+        });
     }
 
     /**
@@ -827,6 +836,46 @@ class Scratch3SpeechBlocks {
         });
     }
 
+    _speechMatches (pattern, text) {
+        let input = Cast.toString(pattern).toLowerCase();
+        // facilitate matches by removing some punctuation: . ? !
+        input = input.replace(/[.?!]/g, '');
+        // trim off any white space
+        input = input.trim();
+
+        const match = this._computeMatch(text, pattern);
+        return match !== -1;
+    // if (haystack && haystack.indexOf(input) != -1) {
+    //   return true;
+    // }
+    // return false;
+    }
+
+    /**
+     * Kick off the listening process.
+     * @private
+     */
+    _startListening () {
+        // If we've already setup the context, we can resume instead of doing all the setup again.
+        if (this._context) {
+            // TODO: rename to resumeListening?
+            this._resumeRecording();
+        } else {
+            // TODO: rename to initRecording. Or initListening?
+            this._startRecording();
+        }
+        // Force the block to timeout if we don't get any results back/the user didn't say anything.
+        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
+    }
+
+    /**
+     * The key to load & store a target's speech-related state.
+     * @type {string}
+     */
+    static get STATE_KEY () {
+        return 'Scratch.speech';
+    }
+
     /**
      * @returns {object} Metadata for this extension and its blocks.
      */
@@ -862,31 +911,6 @@ class Scratch3SpeechBlocks {
         };
     }
 
-    _speechMatches (pattern, text) {
-        let input = Cast.toString(pattern).toLowerCase();
-        // facilitate matches by removing some punctuation: . ? !
-        input = input.replace(/[.?!]/g, '');
-        // trim off any white space
-        input = input.trim();
-
-        const match = this._computeMatch(text, pattern);
-        return match !== -1;
-    // if (haystack && haystack.indexOf(input) != -1) {
-    //   return true;
-    // }
-    // return false;
-    }
-
-
-    /**
-     * An edge triggered hat block to listen for a specific phrase.
-     * @param {object} args - the block arguments.
-     * @return {boolean} true if the phrase matches what was transcribed.
-     */
-    whenIHearHat (args) {
-        return this._speechMatches(args.PHRASE, this.temp_speech);
-    }
-
     /**
      * Start the listening process if it isn't already in progress, playing a sound to indicate
      * when it starts and stops.
@@ -912,43 +936,18 @@ class Scratch3SpeechBlocks {
     }
 
     /**
-     * Play the given sound.
-     * @param {}
-     * @returns {Promise}
-     * @private
+     * An edge triggered hat block to listen for a specific phrase.
+     * @param {object} args - the block arguments.
+     * @return {boolean} true if the phrase matches what was transcribed.
      */
-    _playSound (buffer) {
-        if (this.runtime.audioEngine === null) return;
-        const context = this.runtime.audioEngine.audioContext;
-        const bufferSource = context.createBufferSource();
-        bufferSource.buffer = buffer;
-        bufferSource.connect(this.runtime.audioEngine.input);
-        bufferSource.start();
-        return new Promise(resolve => {
-            bufferSource.onended = () => {
-                resolve();
-            };
-        });
+    whenIHearHat (args) {
+        return this._speechMatches(args.PHRASE, this.temp_speech);
     }
 
     /**
-     * Kick off the listening process.
-     * @private
+     * Reporter for the last heard phrase/utterance.
+     * @return {string} The lastest thing we heard from a listen and wait block.
      */
-    _startListening () {
-        // If we've already setup the context, we can resume instead of doing all the setup again.
-        if (this._context) {
-            // TODO: rename to resumeListening?
-            this._resumeRecording();
-        } else {
-            // TODO: rename to initRecording. Or initListening?
-            this._startRecording();
-        }
-        // Force the block to timeout if we don't get any results back/the user didn't say anything.
-        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
-    }
-
-    // Reporter for the last heard phrase/utterance.
     getSpeech () {
         return this._currentUtterance;
     }
