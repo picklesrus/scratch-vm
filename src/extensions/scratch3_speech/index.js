@@ -95,6 +95,7 @@ class Scratch3SpeechBlocks {
          * and hasn't receieved results back yet, when we encounter more, any further ones
          * will all resolve when we get the next acceptable transcription result back.
          * @type {!Array}
+         * @private
          */
         this._speechPromises = [];
 
@@ -102,6 +103,7 @@ class Scratch3SpeechBlocks {
          * The id of the timeout that will run if we start listening and don't get any
          * transcription results back. e.g. because we didn't hear anything.
          * @type {number}
+         * @private
          */
         this._speechTimeoutId = null;
 
@@ -109,24 +111,58 @@ class Scratch3SpeechBlocks {
          * The id of the timeout that will run to wait for after we're done listening but
          * are still waiting for a potential isFinal:true transcription result to come back.
          * @type {number}
+         * @private
          */
         this._speechFinalResponseTimeout = null;
 
-        // The ScriptProcessorNode hooked up to the audio context.
+        /**
+         * The ScriptProcessorNode hooked up to the audio context.
+         * @type {ScriptProcessorNode}
+         * @private
+         */
         this._scriptNode = null;
 
-        // The socket to send microphone data over.
+        /**
+         * The socket used to communicate with the speech server to send microphone data
+         * and recieve transcription results.
+         * @type {WebSocket}
+         * @private
+         */
         this._socket = null;
-        // The AudioContext used to manage the microphone
+
+        /**
+         * The AudioContext used to manage the microphone.
+         * @type {AudioContext}
+         * @private
+         */
         this._context = null;
-        // MediaStreamAudioSourceNode to handle microphone data.
+
+        /**
+         * MediaStreamAudioSourceNode to handle microphone data.
+         * @type {MediaStreamAudioSourceNode}
+         * @private
+         */
         this._sourceNode = null;
 
-        // A Promise whose fulfillment handler receives a MediaStream object when the microphone has been obtained.
+        /**
+         * A Promise whose fulfillment handler receives a MediaStream object when the microphone has been obtained.
+         * @type {Promise}
+         * @private
+         */
         this._audioPromise = null;
 
-        // Audio buffers for sounds to indicate that listending has started and ended.
+        /**
+         * Audio buffer for sound to indicate that listending has started.
+         * @type {bufferSourceNode}
+         * @private
+         */
         this._startSoundBuffer = null;
+
+        /**
+         * Audio buffer for sound to indicate that listending has ended.
+         * @type {bufferSourceNode}
+         * @private
+         */
         this._endSoundBuffer = null;
 
 
@@ -494,9 +530,10 @@ class Scratch3SpeechBlocks {
         // it, start streaming the audio bytes to the server and listening for
         // transcriptions.
         this._socket.addEventListener('message', this._socketMessageCallback, {once: true});
-        console.log(`sending phrase list: ${this._phraseList}`);
+        log.info(`sending phrase list: ${this._phraseList}`);
         this._socket.send(JSON.stringify(
-            {sampleRate: this._context.sampleRate,
+            {
+                sampleRate: this._context.sampleRate,
                 phrases: this._phraseList
             }
         ));
@@ -532,14 +569,22 @@ class Scratch3SpeechBlocks {
         return words;
     }
 
-    // Setup listening for socket.
-    _socketMessageCallback (e) {
+    /**
+     * Callback called once we've initially established the web socket is open and working.
+     * Sets up the callback for subsequent messages (i.e. transcription results)  and
+     * connects to the script node to get data.
+     * @private
+     */
+    _socketMessageCallback () {
         this._socket.addEventListener('message', this._onTranscriptionFromServer);
-        this._startByteStream(e);
+        this._startByteStream();
     }
 
-    // Setup so we can start streaming mic data
-    _startByteStream (e) {
+    /**
+     * Do setup so we can start streaming mic data.
+     * @private
+     */
+    _startByteStream () {
         // Hook up the scriptNode to the mic
         this._sourceNode = this._context.createMediaStreamSource(this._micStream);
         this._sourceNode.connect(this._scriptNode);
