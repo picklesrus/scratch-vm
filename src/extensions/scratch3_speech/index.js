@@ -18,6 +18,12 @@ const iconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_whi
 const menuIconURI = 'https://www.gstatic.com/images/icons/material/system/1x/mic_grey600_24dp.png';
 
 /**
+ * The url of the speech server.
+ * @type {string}
+ */
+const serverURL = 'wss://speech.scratch.mit.edu';
+
+/**
  * The amount of time to wait between when we stop sending speech data to the server and when
  * we expect the transcription result marked with isFinal: true to come back from the server.
  * @type {int}
@@ -33,6 +39,9 @@ const finalResponseTimeoutDurationMs = 3000;
  */
 const listenAndWaitBlockTimeoutMs = 10000;
 
+/** 
+ *
+ */
 /**
  * The start and stop sounds, loaded as static assets.
  * @type {object}
@@ -439,19 +448,19 @@ class Scratch3SpeechBlocks {
         }
     }
 
-    // Callback when ready to setup a new socket connection with speech server.
+    /**
+     * Callback called when it is time to setup the new web socket.
+     * @param {Function} resolve - function to call when the web socket opens succesfully.
+     * @param {Function} reject - function to call if opening the web socket fails.
+     */
     _newSocketCallback (resolve, reject) {
-        console.log('creating a new web socket');
-        // TODO: Stop hardcoding localhost and port
-        // var server = 'ws://localhost:8080';
-        const server = 'wss://speech.scratch.mit.edu';
-        this._socket = new WebSocket(server);
+        this._socket = new WebSocket(serverURL);
         this._socket.addEventListener('open', resolve);
         this._socket.addEventListener('error', reject);
     }
 
     _stopTranscription () {
-        // what should actually get stopped here???
+        // This can get called (e.g. on)
         if (this._socket) {
             this._context.suspend.bind(this._context);
             if (this._scriptNode) {
@@ -463,19 +472,22 @@ class Scratch3SpeechBlocks {
         }
     }
 
-    // Callback to handle initial setting up of a socket.
-    // Currently we send a setup message (only contains sample rate) but might
-    // be useful to send more data so we can do quota stuff.
+    /**
+     * Callback to handle initial setting up of a socket.
+     * Currently we send a setup message (only contains sample rate) but might
+     * be useful to send more data so we can do quota stuff.
+     * @param {Array} values The
+     */
     _setupSocketCallback (values) {
         this._micStream = values[0];
         this._socket = values[1].target;
 
-        // TODO: go look at the serve and see if it implements this.
+        // TODO: go look at the server and see if it implements this.
         this._socket.addEventListener('close', e => {
-            console.log('socket close listener..');
+            log.info(`socket close listener..${e}`);
         });
         this._socket.addEventListener('error', e => {
-            console.log('Error from websocket', e);
+            log.error(`Error from web socket: ${e}`);
         });
 
         // Send the initial configuration message. When the server acknowledges
@@ -522,7 +534,6 @@ class Scratch3SpeechBlocks {
 
     // Setup listening for socket.
     _socketMessageCallback (e) {
-        console.log('socket message callback');
         this._socket.addEventListener('message', this._onTranscriptionFromServer);
         this._startByteStream(e);
     }
@@ -535,13 +546,17 @@ class Scratch3SpeechBlocks {
         this._scriptNode.connect(this._context.destination);
     }
 
-    // Called when we're ready to start listening and want to open a socket.
+    /**
+     * Sets up callback for when socket and audio are initialized.
+     * @private
+     */
     _newWebsocket () {
-        console.log('setting up new socket and setting up block timeout.');
         const websocketPromise = new Promise(this._newSocketCallback);
         Promise.all([this._audioPromise, websocketPromise]).then(
             this._setupSocketCallback)
-            .catch(console.log.bind(console));
+            .catch(e => {
+                log.error(`Problem with setup:  ${e}`);
+            });
     }
 
     // Called when we're done listening and want to close the web socket server.
@@ -560,15 +575,12 @@ class Scratch3SpeechBlocks {
         }
     }
 
-    // Called when a listen block times out without detecting an end of
-    // utterance message during transcription.
+    /**
+     * Called when a listen block times out without getting a transcription result.
+     * This could happen because nobody said aything or of the quality of results are poor.
+     */
     _timeOutListening () {
-        console.log('timeout fired. Resetting listening');
-        // this._currentUtterance = '';  // should this be NULL OR empty?
-        //  this.temp_speech = ''; // should this be null or empty?
-        //    this._resetActiveListening();
         this._stopTranscription();
-        // this._playSound(this._endSoundBuffer);
     }
 
     // When we get a transcription result, save the result to _currentUtterance,
@@ -688,12 +700,16 @@ class Scratch3SpeechBlocks {
         this._onTranscription(result);
     }
 
-    // Called when we have data from the Microphone. Takes that data and ships
-    // it off to the speech server for transcription.
+    /**
+     * Called when we have data from the microphone. Takes that data and ships
+     * it off to the speech server for transcription.
+     * @param {audioProcessingEvent} e The event with audio data in it.
+     * @private
+     */
     _processAudioCallback (e) {
         if (this._socket.readyState === WebSocket.CLOSED ||
         this._socket.readyState === WebSocket.CLOSING) {
-            console.log(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
+            log.error(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
             return;
         }
         const MAX_INT = Math.pow(2, 16 - 1) - 1;
@@ -703,30 +719,45 @@ class Scratch3SpeechBlocks {
         this._socket.send(Int16Array.from(floatSamples.map(n => n * MAX_INT)));
     }
 
-    // Called to setup the AudioContext and its callbacks.
-    initWebSocket () {
-    // Create a node that sends raw bytes across the websocket
+    
+    /**
+     * Sets up the script processor and the web socket.
+     * @private
+     *
+     */
+    _initScriptNode () {
+        // Create a node that sends raw bytes across the websocket
         this._scriptNode = this._context.createScriptProcessor(4096, 1, 1);
         // Need the maximum value for 16-bit signed samples, to convert from float.
         this._scriptNode.addEventListener('audioprocess', this._processAudioCallback);
+    }
+
+
+    /**
+     * Resume listening for audio and re-open the socket to send data.
+     * @private
+     */
+    _resumeRecording () {
+        this._context.resume.bind(this._context);
         this._newWebsocket();
     }
 
     /**
-     * Called when we're ready to start recording from the microphone and sending
-     * that data to the speech server. Does all mic setup if it hasn't already been done,
-     * otherwise it resumes.
+     * Does all setup to get microphone data and initializes the web socket.
+     * that data to the speech server.
      * @private
      */
     _startRecording () {
-        // We already setup the audio context, so resume and re-open the socket to send data.
-        if (this._context) {
-            this._context.resume.bind(this._context);
-            this._newWebsocket();
-            return;
-        }
+        this._initializeMicrophone();
+        this._initScriptNode();
+        this._newWebsocket();
+    }
 
-        // All the setup for reading from microphone.
+    /**
+     * Initialize the audio context and connect the microphone.
+     * @private
+     */
+    _initializeMicrophone () {
         this._context = new AudioContext();
         this._audioPromise = navigator.mediaDevices.getUserMedia({
             audio: {
@@ -747,10 +778,7 @@ class Scratch3SpeechBlocks {
         }).catch(e => {
             log.error(`Problem connecting to microphone:  ${e}`);
         });
-
-        this.initWebSocket();
     }
-
 
     /**
      * @returns {object} Metadata for this extension and its blocks.
@@ -858,11 +886,18 @@ class Scratch3SpeechBlocks {
 
     /**
      * Kick off the listening process.
-     * // TODO: maybe fold this into startRecording?
      * @private
      */
     _startListening () {
-        this._startRecording();
+        // If we've already setup the context, we can resume instead of doing all the setup again.
+        if (this._context) {
+            // TODO: rename to resumeListening?
+            this._resumeRecording();
+        } else {
+            // TODO: rename to initRecording. Or initListening?
+            this._startRecording();
+        }
+        // Force the block to timeout if we don't get any results back/the user didn't say anything.
         this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
     }
 
