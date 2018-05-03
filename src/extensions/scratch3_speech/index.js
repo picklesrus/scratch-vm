@@ -165,7 +165,6 @@ class Scratch3SpeechBlocks {
          */
         this._endSoundBuffer = null;
 
-
         // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
         this.Match_Threshold = 0.3;
         // How far to search for a match (0 = exact location, 1000+ = broad match).
@@ -175,6 +174,7 @@ class Scratch3SpeechBlocks {
 
         // The number of bits in an int.
         this.Match_MaxBits = 32;
+
 
         // Come back and figure out which of these I really need.
         this._startListening = this._startListening.bind(this);
@@ -365,7 +365,8 @@ class Scratch3SpeechBlocks {
     }
 
     /**
-     * Decode the UI sounds.
+     * Load the UI sounds played when listening starts and stops.
+     * @private
      */
     _loadUISounds () {
         const startSoundBuffer = assetData['speech-rec-start.mp3'].buffer;
@@ -383,6 +384,7 @@ class Scratch3SpeechBlocks {
      * Decode a sound and return a promise with the audio buffer.
      * @param  {ArrayBuffer} soundBuffer - a buffer containing the encoded audio.
      * @return {Promise} - a promise which will resolve once the sound has decoded.
+     * @private
      */
     _decodeSound (soundBuffer) {
         const context = this.runtime.audioEngine && this.runtime.audioEngine.audioContext;
@@ -409,6 +411,7 @@ class Scratch3SpeechBlocks {
      * Download and decode a sound.
      * @param {string} fileName - the audio file name.
      * @return {Promise} - a promise which will resolve once the sound has loaded.
+     * @private
      */
     _loadSound (fileName) {
         if (!this.runtime.storage) return;
@@ -445,7 +448,6 @@ class Scratch3SpeechBlocks {
      * @private
      */
     _resolveSpeechPromises () {
-        console.log('resetting ' + this._speechPromises.length + ' promises');
         for (let i = 0; i < this._speechPromises.length; i++) {
             const resFn = this._speechPromises[i];
             resFn();
