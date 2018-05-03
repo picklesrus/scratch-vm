@@ -534,28 +534,32 @@ class Scratch3SpeechBlocks {
         this._stopTranscription();
     }
 
-    // When we get a transcription result, save the result to _currentUtterance,
-    // resolve the current promise.
-    _onTranscription (result) {
+    /**
+     * Processes the results we get back from the speech server.  Decides whether the results
+     * are good enough to keep. If they are, resolves the 'Listen and Wait' blocks promise and cleans up.
+     * @param {object} result The transcription results.
+     */
+    _processTranscriptionResult (result) {
         let transcriptionResult = result.alternatives[0].transcript;
-        // Confidence seems to be 0 when a result has isFinal: true
+  
+        // Facilitate matches by lowercasing, removing some punctuation: . ? ! and whitespace.
         transcriptionResult = Cast.toString(transcriptionResult).toLowerCase();
-        // facilitate matches by removing some punctuation: . ? !
         transcriptionResult = transcriptionResult.replace(/[.?!]/g, '');
-        // trim off any white space
         transcriptionResult = transcriptionResult.trim();
 
-        // this._computeMatch(transcriptionResult);
-
+        // Waiting for an exact match is not satisfying.  It makes it hard to catch
+        // things like homonyms or things like "let us" vs "lettuce".  Using the fuzzy matching helps
+        // more aggressively match the phrases that are in the "When I hear" hat blocks.
         const phrases = this._phraseList.join(' ');
         let matchResult = null;
         const match = this._computeMatch(transcriptionResult, phrases);
 
         if (match !== -1) {
-            console.log('partial match.');
             matchResult = transcriptionResult.substring(match, match + phrases.length);
-            console.log(`match result: ${matchResult}`);
+            log.info(`partial match result: ${matchResult}`);
         }
+
+        
         const shouldKeepMatch = match !== -1 && result.stability > .85; // don't keep matches if the stability is low.
 
         // if (!result.isFinal && result.stability < .85 && !this._phraseList.includes(transcriptionResult) && match == -1) {
@@ -622,33 +626,21 @@ class Scratch3SpeechBlocks {
         if (this._sourceNode) this._sourceNode.disconnect();
     }
 
-    // This needs a new name - currently handles all messages fromt the socket
-    // server. Even the init message and the "end of utterance message";
+    /**
+     * Handle a message from the socket. It contains transcription results.
+     * @param {MessageEvent} e The message event containing data from speech server.
+     * @private
+     */
     _onTranscriptionFromServer (e) {
-        console.log(`transcription ${e.data}`);
-        if (e.data === 'got the configuration message') {
-            console.log('received initial response from socket server.');
-            return;
-        } else if (e.data === 'end of utterance') {
-            // End of utterance is a message we get, but it doesn't mean we've got
-            // the final results yet.  So for now, ignore?
-            console.log('Got an end of utterance message. Ignoring it though.');
-            return;
-        }
-
-        // This is an actual transcription result.
         let result = null;
         try {
             result = JSON.parse(e.data);
         } catch (ex) {
-            console.log(`problem parsing json. continuing: ${ex}`);
+            log.error(`Problem parsing json. continuing: ${ex}`);
             // TODO: stop stuff?
             return;
         }
-        // Throw a transcription event that we'll catch later and decice whether to
-        // resolve the promise.
-        //      this.runtime.emit('TRANSCRIPTION', result);
-        this._onTranscription(result);
+        this._processTranscriptionResult(result);
     }
 
   
