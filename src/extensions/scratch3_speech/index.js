@@ -405,34 +405,6 @@ class Scratch3SpeechBlocks {
     }
 
     /**
-     * Download and decode a sound.
-     * @param {string} fileName - the audio file name.
-     * @return {Promise} - a promise which will resolve once the sound has loaded.
-     * @private
-     */
-    _loadSound (fileName) {
-        if (!this.runtime.storage) return;
-        if (!this.runtime.audioEngine) return;
-        if (!this.runtime.audioEngine.audioContext) return;
-        return this.runtime.storage.load(this.runtime.storage.AssetType.Sound, fileName, 'mp3')
-            .then(soundAsset => {
-                const context = this.runtime.audioEngine.audioContext;
-                // Check for newer promise-based API
-                if (context.decodeAudioData.length === 1) {
-                    return context.decodeAudioData(soundAsset.data.buffer);
-                } else { // eslint-disable-line no-else-return
-                    // Fall back to callback API
-                    return new Promise((resolve, reject) =>
-                        context.decodeAudioData(soundAsset.data.buffer,
-                            buffer => resolve(buffer),
-                            error => reject(error)
-                        )
-                    );
-                }
-            });
-    }
-
-    /**
      * Play the given sound.
      * @param {ArrayBuffer} buffer The audio buffer to play.
      * @returns {Promise} A promise that resoloves when the sound is done playing.
