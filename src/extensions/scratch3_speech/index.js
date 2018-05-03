@@ -495,17 +495,6 @@ class Scratch3SpeechBlocks {
         }
     }
 
-    /**
-     * Callback called when it is time to setup the new web socket.
-     * @param {Function} resolve - function to call when the web socket opens succesfully.
-     * @param {Function} reject - function to call if opening the web socket fails.
-     */
-    _newSocketCallback (resolve, reject) {
-        this._socket = new WebSocket(serverURL);
-        this._socket.addEventListener('open', resolve);
-        this._socket.addEventListener('error', reject);
-    }
-
     _stopTranscription () {
         // This can get called (e.g. on)
         if (this._socket) {
@@ -517,37 +506,6 @@ class Scratch3SpeechBlocks {
             // Give it a couple seconds to response before giving up and assuming nothing.
             this._speechFinalResponseTimeout = setTimeout(this._resetActiveListening, finalResponseTimeoutDurationMs);
         }
-    }
-
-    /**
-     * Callback to handle initial setting up of a socket.
-     * Currently we send a setup message (only contains sample rate) but might
-     * be useful to send more data so we can do quota stuff.
-     * @param {Array} values The
-     */
-    _setupSocketCallback (values) {
-        this._micStream = values[0];
-        this._socket = values[1].target;
-
-        // TODO: go look at the server and see if it implements this.
-        this._socket.addEventListener('close', e => {
-            log.info(`socket close listener..${e}`);
-        });
-        this._socket.addEventListener('error', e => {
-            log.error(`Error from web socket: ${e}`);
-        });
-
-        // Send the initial configuration message. When the server acknowledges
-        // it, start streaming the audio bytes to the server and listening for
-        // transcriptions.
-        this._socket.addEventListener('message', this._socketMessageCallback, {once: true});
-        log.info(`sending phrase list: ${this._phraseList}`);
-        this._socket.send(JSON.stringify(
-            {
-                sampleRate: this._context.sampleRate,
-                phrases: this._phraseList
-            }
-        ));
     }
     
     /**
@@ -578,41 +536,6 @@ class Scratch3SpeechBlocks {
             });
         });
         return words;
-    }
-
-    /**
-     * Callback called once we've initially established the web socket is open and working.
-     * Sets up the callback for subsequent messages (i.e. transcription results)  and
-     * connects to the script node to get data.
-     * @private
-     */
-    _socketMessageCallback () {
-        this._socket.addEventListener('message', this._onTranscriptionFromServer);
-        this._startByteStream();
-    }
-
-    /**
-     * Do setup so we can start streaming mic data.
-     * @private
-     */
-    _startByteStream () {
-        // Hook up the scriptNode to the mic
-        this._sourceNode = this._context.createMediaStreamSource(this._micStream);
-        this._sourceNode.connect(this._scriptNode);
-        this._scriptNode.connect(this._context.destination);
-    }
-
-    /**
-     * Sets up callback for when socket and audio are initialized.
-     * @private
-     */
-    _newWebsocket () {
-        const websocketPromise = new Promise(this._newSocketCallback);
-        Promise.all([this._audioPromise, websocketPromise]).then(
-            this._setupSocketCallback)
-            .catch(e => {
-                log.error(`Problem with setup:  ${e}`);
-            });
     }
 
     // Called when we're done listening and want to close the web socket server.
@@ -756,38 +679,38 @@ class Scratch3SpeechBlocks {
         this._onTranscription(result);
     }
 
+  
+    _speechMatches (pattern, text) {
+        let input = Cast.toString(pattern).toLowerCase();
+        // facilitate matches by removing some punctuation: . ? !
+        input = input.replace(/[.?!]/g, '');
+        // trim off any white space
+        input = input.trim();
+
+        const match = this._computeMatch(text, pattern);
+        return match !== -1;
+    // if (haystack && haystack.indexOf(input) != -1) {
+    //   return true;
+    // }
+    // return false;
+    }
+
     /**
-     * Called when we have data from the microphone. Takes that data and ships
-     * it off to the speech server for transcription.
-     * @param {audioProcessingEvent} e The event with audio data in it.
+     * Kick off the listening process.
      * @private
      */
-    _processAudioCallback (e) {
-        if (this._socket.readyState === WebSocket.CLOSED ||
-        this._socket.readyState === WebSocket.CLOSING) {
-            log.error(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
-            return;
+    _startListening () {
+        // If we've already setup the context, we can resume instead of doing all the setup again.
+        if (this._context) {
+            // TODO: rename to resumeListening?
+            this._resumeRecording();
+        } else {
+            // TODO: rename to initRecording. Or initListening?
+            this._startRecording();
         }
-        const MAX_INT = Math.pow(2, 16 - 1) - 1;
-        const floatSamples = e.inputBuffer.getChannelData(0);
-        // The samples are floats in range [-1, 1]. Convert to 16-bit signed
-        // integer.
-        this._socket.send(Int16Array.from(floatSamples.map(n => n * MAX_INT)));
+        // Force the block to timeout if we don't get any results back/the user didn't say anything.
+        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
     }
-
-    
-    /**
-     * Sets up the script processor and the web socket.
-     * @private
-     *
-     */
-    _initScriptNode () {
-        // Create a node that sends raw bytes across the websocket
-        this._scriptNode = this._context.createScriptProcessor(4096, 1, 1);
-        // Need the maximum value for 16-bit signed samples, to convert from float.
-        this._scriptNode.addEventListener('audioprocess', this._processAudioCallback);
-    }
-
 
     /**
      * Resume listening for audio and re-open the socket to send data.
@@ -836,36 +759,112 @@ class Scratch3SpeechBlocks {
         });
     }
 
-    _speechMatches (pattern, text) {
-        let input = Cast.toString(pattern).toLowerCase();
-        // facilitate matches by removing some punctuation: . ? !
-        input = input.replace(/[.?!]/g, '');
-        // trim off any white space
-        input = input.trim();
-
-        const match = this._computeMatch(text, pattern);
-        return match !== -1;
-    // if (haystack && haystack.indexOf(input) != -1) {
-    //   return true;
-    // }
-    // return false;
+    /**
+     * Sets up the script processor and the web socket.
+     * @private
+     *
+     */
+    _initScriptNode () {
+        // Create a node that sends raw bytes across the websocket
+        this._scriptNode = this._context.createScriptProcessor(4096, 1, 1);
+        // Need the maximum value for 16-bit signed samples, to convert from float.
+        this._scriptNode.addEventListener('audioprocess', this._processAudioCallback);
     }
 
     /**
-     * Kick off the listening process.
+     * Callback called when it is time to setup the new web socket.
+     * @param {Function} resolve - function to call when the web socket opens succesfully.
+     * @param {Function} reject - function to call if opening the web socket fails.
+     */
+    _newSocketCallback (resolve, reject) {
+        this._socket = new WebSocket(serverURL);
+        this._socket.addEventListener('open', resolve);
+        this._socket.addEventListener('error', reject);
+    }
+
+    /**
+     * Callback called once we've initially established the web socket is open and working.
+     * Sets up the callback for subsequent messages (i.e. transcription results)  and
+     * connects to the script node to get data.
      * @private
      */
-    _startListening () {
-        // If we've already setup the context, we can resume instead of doing all the setup again.
-        if (this._context) {
-            // TODO: rename to resumeListening?
-            this._resumeRecording();
-        } else {
-            // TODO: rename to initRecording. Or initListening?
-            this._startRecording();
+    _socketMessageCallback () {
+        this._socket.addEventListener('message', this._onTranscriptionFromServer);
+        this._startByteStream();
+    }
+
+    /**
+     * Sets up callback for when socket and audio are initialized.
+     * @private
+     */
+    _newWebsocket () {
+        const websocketPromise = new Promise(this._newSocketCallback);
+        Promise.all([this._audioPromise, websocketPromise]).then(
+            this._setupSocketCallback)
+            .catch(e => {
+                log.error(`Problem with setup:  ${e}`);
+            });
+    }
+
+    /**
+     * Callback to handle initial setting up of a socket.
+     * Currently we send a setup message (only contains sample rate) but might
+     * be useful to send more data so we can do quota stuff.
+     * @param {Array} values The
+     */
+    _setupSocketCallback (values) {
+        this._micStream = values[0];
+        this._socket = values[1].target;
+
+        // TODO: go look at the server and see if it implements this.
+        this._socket.addEventListener('close', e => {
+            log.info(`socket close listener..${e}`);
+        });
+        this._socket.addEventListener('error', e => {
+            log.error(`Error from web socket: ${e}`);
+        });
+
+        // Send the initial configuration message. When the server acknowledges
+        // it, start streaming the audio bytes to the server and listening for
+        // transcriptions.
+        this._socket.addEventListener('message', this._socketMessageCallback, {once: true});
+        log.info(`sending phrase list: ${this._phraseList}`);
+        this._socket.send(JSON.stringify(
+            {
+                sampleRate: this._context.sampleRate,
+                phrases: this._phraseList
+            }
+        ));
+    }
+
+    /**
+     * Do setup so we can start streaming mic data.
+     * @private
+     */
+    _startByteStream () {
+        // Hook up the scriptNode to the mic
+        this._sourceNode = this._context.createMediaStreamSource(this._micStream);
+        this._sourceNode.connect(this._scriptNode);
+        this._scriptNode.connect(this._context.destination);
+    }
+
+    /**
+     * Called when we have data from the microphone. Takes that data and ships
+     * it off to the speech server for transcription.
+     * @param {audioProcessingEvent} e The event with audio data in it.
+     * @private
+     */
+    _processAudioCallback (e) {
+        if (this._socket.readyState === WebSocket.CLOSED ||
+        this._socket.readyState === WebSocket.CLOSING) {
+            log.error(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
+            return;
         }
-        // Force the block to timeout if we don't get any results back/the user didn't say anything.
-        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
+        const MAX_INT = Math.pow(2, 16 - 1) - 1;
+        const floatSamples = e.inputBuffer.getChannelData(0);
+        // The samples are floats in range [-1, 1]. Convert to 16-bit signed
+        // integer.
+        this._socket.send(Int16Array.from(floatSamples.map(n => n * MAX_INT)));
     }
 
     /**
