@@ -441,7 +441,6 @@ class Scratch3SpeechBlocks {
     //   - closes socket with speech socket server
     //   - clears out any remaining speech blocks that think they need to run.
     _resetListening () {
-        console.log('_resetListening.');
         // Check whether context has been set up yet. This can get called before
         // We ever tried to listen for anything. e.g. on Green Flag click.
         if (this._context) {
@@ -535,83 +534,115 @@ class Scratch3SpeechBlocks {
     }
 
     /**
+     * Decides whether to keep a given transcirption result.
+     * @param {number} fuzzyMatchIndex Index of the fuzzy match or -1 if there is no match.
+     * @param {object} result The json object representing the transcription result.
+     * @param {string} normalizedTranscript The transcription text used for matching (i.e. lowercased, no punctuation).
+     * @returns {boolean} true If a result is good enough to be kept.
+     * @private
+     */
+    _shouldKeepResult (fuzzyMatchIndex, result, normalizedTranscript) {
+        // The threshold above which we decide transcription results are unlikely to change again.
+        // See https://cloud.google.com/speech-to-text/docs/basics#streaming_responses.
+        const stabilityThreshold = .85;
+
+        // For responsiveness of the When I Hear hat blocks, sometimes we want to keep results that are not
+        // yet marked 'isFinal' by the speech api.  Here are some signals we use.
+
+        // If the result from the speech api isn't very stable and we only had a fuzzy match, we don't want to use it.
+        const shouldKeepFuzzyMatch = fuzzyMatchIndex !== -1 && result.stability > stabilityThreshold;
+
+        // If the result is in the phraseList (i.e. it matches one of the 'When I Hear' blocks), we keep it.
+        // This might be aggressive... but so far seems to be a good thing.
+        const shouldKeepPhraseListMatch = this._phraseList.includes(normalizedTranscript);
+
+        if (!result.isFinal && !shouldKeepPhraseListMatch && !shouldKeepFuzzyMatch) {
+            log.info(`not good enough yet transcriptionResult: ${result}`);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Normalizes text a bit to facilitate matching.  Lowercases, removes some punctuation and whitespace.
+     * @param {string} text The text to normalzie
+     * @returns {string} The normalized text.
+     * @private
+     */
+    _normalizeText (text) {
+        text = Cast.toString(text).toLowerCase();
+        text = text.replace(/[.?!]/g, '');
+        text = text.trim();
+        return text;
+    }
+
+    /**
      * Processes the results we get back from the speech server.  Decides whether the results
      * are good enough to keep. If they are, resolves the 'Listen and Wait' blocks promise and cleans up.
-     * @param {object} result The transcription results.
+     * @param {object} result The transcription result.
+     * @private
      */
     _processTranscriptionResult (result) {
-        let transcriptionResult = result.alternatives[0].transcript;
+        const transcriptionResult = this._normalizeText(result.alternatives[0].transcript);
   
-        // Facilitate matches by lowercasing, removing some punctuation: . ? ! and whitespace.
-        transcriptionResult = Cast.toString(transcriptionResult).toLowerCase();
-        transcriptionResult = transcriptionResult.replace(/[.?!]/g, '');
-        transcriptionResult = transcriptionResult.trim();
-
+        
         // Waiting for an exact match is not satisfying.  It makes it hard to catch
-        // things like homonyms or things like "let us" vs "lettuce".  Using the fuzzy matching helps
+        // things like homonyms or things that sound similar "let us" vs "lettuce".  Using the fuzzy matching helps
         // more aggressively match the phrases that are in the "When I hear" hat blocks.
         const phrases = this._phraseList.join(' ');
-        let matchResult = null;
-        const match = this._computeMatch(transcriptionResult, phrases);
+        const fuzzyMatchIndex = this._computeFuzzyMatch(transcriptionResult, phrases);
 
-        if (match !== -1) {
-            matchResult = transcriptionResult.substring(match, match + phrases.length);
-            log.info(`partial match result: ${matchResult}`);
+        let fuzzyMatchResult = null;
+        if (fuzzyMatchIndex !== -1) {
+            fuzzyMatchResult = transcriptionResult.substring(fuzzyMatchIndex, fuzzyMatchIndex + phrases.length);
+            log.info(`partial match result: ${fuzzyMatchResult}`);
         }
 
-        
-        const shouldKeepMatch = match !== -1 && result.stability > .85; // don't keep matches if the stability is low.
-
-        // if (!result.isFinal && result.stability < .85 && !this._phraseList.includes(transcriptionResult) && match == -1) {
-        if (!result.isFinal && !this._phraseList.includes(transcriptionResult) && !shouldKeepMatch) {
-            this._possible_result = transcriptionResult;
-            console.log(`not good enough yet transcriptionResult: ${transcriptionResult}`);
+        // If the result isn't good enough yet, return without saving and resolving the promises.
+        if (!this._shouldKeepResult(fuzzyMatchIndex, result, transcriptionResult)) {
+            log.info(`not good enough yet transcriptionResult: ${transcriptionResult}`);
             return;
         }
 
-        if (matchResult) {
-            this._currentUtterance = matchResult;
+        // TODO: Decide whether this is the right thing.
+        // This sets the currentUtterance (which is returned by the reporter) to the fuzzy match if we had one.
+        // That means it'll often get set to a phrase from one of the 'when I hear' blocks instead of the
+        // full phrase that the user said.
+        if (fuzzyMatchResult) {
+            this._currentUtterance = fuzzyMatchResult;
         } else {
             this._currentUtterance = transcriptionResult;
         }
 
         this.temp_speech = transcriptionResult;
-        console.log(`current utterance set to: ${this._currentUtterance}`);
-        this._resolveSpeechPromises();
-        // this._playSound(this._endSoundBuffer);
-        // Pause the mic and close the web socket.
-        this._context.suspend.bind(this._context);
-        this._closeWebsocket();
-        // We got results so don't bother with the timeout.
+        // We're done listening so resolove all the promises and reset everying so we're ready for next time.
+        this._resetListening();
+        
+        // We got results so clear out the timeouts.
         if (this._speechTimeoutId) {
             clearTimeout(this._speechTimeoutId);
             this._speechTimeoutId = null;
         }
-        // timeout for waiting for last result.
         if (this._speechFinalResponseTimeout) {
             clearTimeout(this._speechFinalResponseTimeout);
             this._speechFinalResponseTimeout = null;
         }
     }
 
-    _computeMatch (text, pattern) {
-        // var text = this._phraseList.join(' ');
-
+    /**
+     * Call into diff match patch library to compute whether there is a fuzzy match.
+     * @param {string} text The text to search in.
+     * @param {string} pattern The pattern to look for in text.
+     * @returns {number} The index of the match or -1 if there isn't one.
+     */
+    _computeFuzzyMatch (text, pattern) {
         // Don't bother matching if any are null.
         if (!pattern || !text) {
             return -1;
         }
 
-        const loc = 0;
-
-        const match = this.match_main(text, pattern, loc);
-        if (match == -1) {
-            // console.log('no match');
-        } else {
-            const quote = text.substring(match, match + text.length);
-            //     console.log(' match found at character  ' + match + ' ' + quote);
-        }
-        return match;
+        const loc = 0; // start looking for the match at the beginning of the string.
+        return this.match_main(text, pattern, loc);
     }
 
     // Disconnect all the audio stuff on the client.
@@ -651,7 +682,7 @@ class Scratch3SpeechBlocks {
         // trim off any white space
         input = input.trim();
 
-        const match = this._computeMatch(text, pattern);
+        const match = this._computeFuzzyMatch(text, pattern);
         return match !== -1;
     // if (haystack && haystack.indexOf(input) != -1) {
     //   return true;
