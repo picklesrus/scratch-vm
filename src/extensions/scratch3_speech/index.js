@@ -184,7 +184,8 @@ class Scratch3SpeechBlocks {
         this._processAudioCallback = this._processAudioCallback.bind(this);
         this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
         this._timeOutListening = this._timeOutListening.bind(this);
-        this._resetActiveListening = this._resetActiveListening.bind(this);
+        this._resetListening = this._resetListening.bind(this);
+
 
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
 
@@ -452,20 +453,6 @@ class Scratch3SpeechBlocks {
         this._resolveSpeechPromises();
     }
 
-    // Called to reset a single instance of listening.  If there are utterances
-    // expected in the queue, kick off the next one.
-    // TODO figure out if/why this is different from resetListening.
-    _resetActiveListening () {
-        console.log('resetting active listening');
-        // TODO: Do I need to test for this?
-        if (this._speechPromises.length > 0) {
-            // Pause the mic and close the web socket.
-            this._context.suspend.bind(this._context);
-            this._closeWebsocket();
-            this._resolveSpeechPromises();
-        }
-    }
-
     _stopTranscription () {
         // This can get called (e.g. on)
         if (this._socket) {
@@ -475,7 +462,7 @@ class Scratch3SpeechBlocks {
             }
             this._socket.send('stopTranscription');
             // Give it a couple seconds to response before giving up and assuming nothing.
-            this._speechFinalResponseTimeout = setTimeout(this._resetActiveListening, finalResponseTimeoutDurationMs);
+            this._speechFinalResponseTimeout = setTimeout(this._resetListening, finalResponseTimeoutDurationMs);
         }
     }
     
@@ -577,6 +564,21 @@ class Scratch3SpeechBlocks {
     }
 
     /**
+     * Call into diff match patch library to compute whether there is a fuzzy match.
+     * @param {string} text The text to search in.
+     * @param {string} pattern The pattern to look for in text.
+     * @returns {number} The index of the match or -1 if there isn't one.
+     */
+    _computeFuzzyMatch (text, pattern) {
+        // Don't bother matching if any are null.
+        if (!pattern || !text) {
+            return -1;
+        }
+
+        const loc = 0; // start looking for the match at the beginning of the string.
+        return this.match_main(text, pattern, loc);
+    }
+    /**
      * Processes the results we get back from the speech server.  Decides whether the results
      * are good enough to keep. If they are, resolves the 'Listen and Wait' blocks promise and cleans up.
      * @param {object} result The transcription result.
@@ -627,22 +629,6 @@ class Scratch3SpeechBlocks {
             clearTimeout(this._speechFinalResponseTimeout);
             this._speechFinalResponseTimeout = null;
         }
-    }
-
-    /**
-     * Call into diff match patch library to compute whether there is a fuzzy match.
-     * @param {string} text The text to search in.
-     * @param {string} pattern The pattern to look for in text.
-     * @returns {number} The index of the match or -1 if there isn't one.
-     */
-    _computeFuzzyMatch (text, pattern) {
-        // Don't bother matching if any are null.
-        if (!pattern || !text) {
-            return -1;
-        }
-
-        const loc = 0; // start looking for the match at the beginning of the string.
-        return this.match_main(text, pattern, loc);
     }
 
     // Disconnect all the audio stuff on the client.
