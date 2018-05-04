@@ -71,21 +71,23 @@ class Scratch3SpeechBlocks {
         this._phraseList = [];
 
         /**
-         * The most recent transcription result received from the speech API.
+         * The most recent transcription result received from the speech API that we decided to keep.
          * This is the value returned by the reporter block.
          * @type {String}
          * @private
          */
         this._currentUtterance = null;
 
-        // TODO: rename and jsdoc this!
-        // using this to test out hat blocks that edge trigger.  The reporter block
-        // uses _currentUtterance and we probably? don't want to reset the value unless
-        // we have new transcription results.  But, in order to detect someone saying
-        // the same thing twice in two subsequent liten and wait blocks
-        // and still trigger the hat, we need this to go from
-        // '' at the beginning of the listen to '<transcription value' at the end.
-        this.temp_speech = null;
+        /**
+         *  Similar to _currentUtterance, but set back to '' at the beginning of listening block.
+         *  Used to get the hat blocks to edge trigger.  In order to detect someone saying
+         *  the same thing twice in two subsequent liten and wait blocks
+         *  and still trigger the hat, we need this to go from
+         *  '' at the beginning of the listen block to '<transcription value>' at the end.
+         * @type {string}
+         * @private
+         */
+        this._utteranceForEdgeTrigger = null;
 
         /**
          * The list of queued `resolve` callbacks for 'Listen and Wait' blocks.
@@ -454,8 +456,8 @@ class Scratch3SpeechBlocks {
         } else {
             this._currentUtterance = transcriptionResult;
         }
+        this._utteranceForEdgeTrigger = transcriptionResult;
 
-        this.temp_speech = transcriptionResult;
         // We're done listening so resolove all the promises and reset everying so we're ready for next time.
         this._resetListening();
         
@@ -481,7 +483,7 @@ class Scratch3SpeechBlocks {
             result = JSON.parse(e.data);
         } catch (ex) {
             log.error(`Problem parsing json. continuing: ${ex}`);
-            // TODO: Should we kill listening and continue?
+            // TODO: Question - Should we kill listening and continue?
             return;
         }
         this._processTranscriptionResult(result);
@@ -621,10 +623,6 @@ class Scratch3SpeechBlocks {
         this._micStream = values[0];
         this._socket = values[1].target;
 
-        // TODO: go look at the server and see if it implements this.
-        this._socket.addEventListener('close', e => {
-            log.info(`socket close listener..${e}`);
-        });
         this._socket.addEventListener('error', e => {
             log.error(`Error from web socket: ${e}`);
         });
@@ -725,10 +723,10 @@ class Scratch3SpeechBlocks {
         // TODO: Look into the timing of when to start the sound.  There currently seems
         // to be some lag between when the sound starts and when the socket message
         // callback is received. Perhaps we should play the sound after the socket is setup.
-        // TODO: Question: Should we only play the sound if listening isn't already in progress?
+        // TODO: Question - Should we only play the sound if listening isn't already in progress?
         return this._playSound(this._startSoundBuffer).then(() => {
             this._phraseList = this._scanBlocksForPhraseList();
-            this.temp_speech = '';
+            this._utteranceForEdgeTrigger = '';
             const speechPromise = new Promise(resolve => {
                 const listeningInProgress = this._speechPromises.length > 0;
                 this._speechPromises.push(resolve);
@@ -746,7 +744,7 @@ class Scratch3SpeechBlocks {
      * @return {boolean} true if the phrase matches what was transcribed.
      */
     whenIHearHat (args) {
-        return this._speechMatches(args.PHRASE, this.temp_speech);
+        return this._speechMatches(args.PHRASE, this._utteranceForEdgeTrigger);
     }
 
     /**
