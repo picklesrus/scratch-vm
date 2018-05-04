@@ -598,7 +598,7 @@ class Scratch3SpeechBlocks {
         // things like homonyms or things that sound similar "let us" vs "lettuce".  Using the fuzzy matching helps
         // more aggressively match the phrases that are in the "When I hear" hat blocks.
         const phrases = this._phraseList.join(' ');
-        const fuzzyMatchIndex = this._computeFuzzyMatch(transcriptionResult, phrases);
+        const fuzzyMatchIndex = this._computeFuzzyMatch(phrases, transcriptionResult);
 
         let fuzzyMatchResult = null;
         if (fuzzyMatchIndex !== -1) {
@@ -655,19 +655,18 @@ class Scratch3SpeechBlocks {
     }
 
   
+    /**
+     * Decide whether the pattern given matches the text. Uses fuzzy matching
+     * @param {string} pattern The pattern to look for.  Usually this is the transcription result
+     * @param {string} text The text to look in. Usually this is the set of phrases from the when I hear blocks
+     * @returns {boolean} true if there is a fuzzy match.
+     * @private
+     */
     _speechMatches (pattern, text) {
-        let input = Cast.toString(pattern).toLowerCase();
-        // facilitate matches by removing some punctuation: . ? !
-        input = input.replace(/[.?!]/g, '');
-        // trim off any white space
-        input = input.trim();
-
+        pattern = this._normalizeText(pattern);
+        text = this._normalizeText(text);
         const match = this._computeFuzzyMatch(text, pattern);
         return match !== -1;
-    // if (haystack && haystack.indexOf(input) != -1) {
-    //   return true;
-    // }
-    // return false;
     }
 
     /**
@@ -833,7 +832,7 @@ class Scratch3SpeechBlocks {
         if (this._socket.readyState === WebSocket.CLOSED ||
         this._socket.readyState === WebSocket.CLOSING) {
             log.error(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
-            // TODO: should we stop trying???
+            // TODO: should we stop trying and reset state so it might work next time?
             return;
         }
         const MAX_INT = Math.pow(2, 16 - 1) - 1;
@@ -892,10 +891,10 @@ class Scratch3SpeechBlocks {
      * @return {Promise} A promise that will resolve when listening is complete.
      */
     listenAndWait () {
-        // look into the timing of when to start the sound.  There currently seems
+        // TODO: Look into the timing of when to start the sound.  There currently seems
         // to be some lag between when the sound starts and when the socket message
-        // callback is received.
-        // TODO: Only play the sound if listening isn't already in progress?
+        // callback is received. Perhaps we should play the sound after the socket is setup.
+        // TODO: Question: Should we only play the sound if listening isn't already in progress?
         return this._playSound(this._startSoundBuffer).then(() => {
             this._phraseList = this._scanBlocksForPhraseList();
             this.temp_speech = '';
