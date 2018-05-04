@@ -183,8 +183,9 @@ class Scratch3SpeechBlocks {
         this._startByteStream = this._startByteStream.bind(this);
         this._processAudioCallback = this._processAudioCallback.bind(this);
         this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
-        this._timeOutListening = this._timeOutListening.bind(this);
         this._resetListening = this._resetListening.bind(this);
+        this._stopListening = this._stopListening.bind(this);
+        this._stopTranscription = this._stopTranscription.bind(this);
 
 
         this.runtime.on('PROJECT_STOP_ALL', this._resetListening.bind(this));
@@ -426,47 +427,6 @@ class Scratch3SpeechBlocks {
     }
 
     /**
-     * Resolves all the speech promises we've accumulated so far and empties out the list.
-     * @private
-     */
-    _resolveSpeechPromises () {
-        for (let i = 0; i < this._speechPromises.length; i++) {
-            const resFn = this._speechPromises[i];
-            resFn();
-        }
-        this._speechPromises = [];
-    }
-
-    // Resets all things related to listening. Called on Red Stop sign button.
-    //   - suspends audio context
-    //   - closes socket with speech socket server
-    //   - clears out any remaining speech blocks that think they need to run.
-    _resetListening () {
-        // Check whether context has been set up yet. This can get called before
-        // We ever tried to listen for anything. e.g. on Green Flag click.
-        if (this._context) {
-            this._context.suspend.bind(this._context);
-        }
-        // TODO: test multiple listen and wait blocks + stop button.
-        // I think this messes up the socket.
-        this._closeWebsocket();
-        this._resolveSpeechPromises();
-    }
-
-    _stopTranscription () {
-        // This can get called (e.g. on)
-        if (this._socket) {
-            this._context.suspend.bind(this._context);
-            if (this._scriptNode) {
-                this._scriptNode.disconnect();
-            }
-            this._socket.send('stopTranscription');
-            // Give it a couple seconds to response before giving up and assuming nothing.
-            this._speechFinalResponseTimeout = setTimeout(this._resetListening, finalResponseTimeoutDurationMs);
-        }
-    }
-    
-    /**
      * Scans all the 'When I hear' hat blocks for each sprite and pulls out the text.  The list
      * is sent off to the speech recognition server as hints.  This *only* reads the value out of
      * the hat block shadow.  If a block is dropped on top of the shadow, it is skipped.
@@ -496,30 +456,76 @@ class Scratch3SpeechBlocks {
         return words;
     }
 
-    // Called when we're done listening and want to close the web socket server.
-    // Stops listening to the mic and whatnot as well.
+    /**
+     * Resets all things related to listening. Called on Red Stop sign button.
+     *   - suspends audio processing
+     *   - closes socket with speech socket server
+     *   - clears out any remaining speech blocks that are waiting.
+     * @private.
+     */
+    _resetListening () {
+        this._stopListening();
+        this._closeWebsocket();
+        this._resolveSpeechPromises();
+    }
+
+    /**
+     * Close the connection to the socket server if it is open.
+     * @private
+     */
     _closeWebsocket () {
-        console.log('closing socket');
-        // This is called on green flag to reset things that may never have existed
-        // in the first place. Do a bunch of checks.
-        if (this._scriptNode) {
-            this._scriptNode.disconnect();
-        }
-        if (this._sourceNode) this._sourceNode.disconnect();
         if (this._socket && this._socket.readyState === this._socket.OPEN) {
-            console.log('sending close socket message');
             this._socket.close();
         }
     }
 
     /**
-     * Called when a listen block times out without getting a transcription result.
-     * This could happen because nobody said aything or of the quality of results are poor.
+     * Call to suspend getting data from the microphone.
+     * @private
      */
-    _timeOutListening () {
-        this._stopTranscription();
+    _stopListening () {
+        // Note that this can be called before any Listen And Wait block did setup,
+        // so check that things exist before disconnecting them.
+        if (this._context) {
+            this._context.suspend.bind(this._context);
+        }
+        // This is called on green flag to reset things that may never have existed
+        // in the first place. Do a bunch of checks.
+        if (this._scriptNode) {
+            this._scriptNode.disconnect();
+        }
+        if (this._sourceNode) {
+            this._sourceNode.disconnect();
+        }
     }
 
+    /**
+     * Resolves all the speech promises we've accumulated so far and empties out the list.
+     * @private
+     */
+    _resolveSpeechPromises () {
+        for (let i = 0; i < this._speechPromises.length; i++) {
+            const resFn = this._speechPromises[i];
+            resFn();
+        }
+        this._speechPromises = [];
+    }
+
+    /**
+     * Called when we want to stop listening (e.g. when a listen block times out)
+     * but we still want to wait a little to see if we get any transcription results
+     * back before yielding the block execution.
+     * @private
+     */
+    _stopTranscription () {
+        this._stopListening();
+        if (this._socket && this._socket.readyState === this._socket.OPEN) {
+            this._socket.send('stopTranscription');
+        }
+        // Give it a couple seconds to response before giving up and assuming nothing else will come back.
+        this._speechFinalResponseTimeout = setTimeout(this._resetListening, finalResponseTimeoutDurationMs);
+    }
+    
     /**
      * Decides whether to keep a given transcirption result.
      * @param {number} fuzzyMatchIndex Index of the fuzzy match or -1 if there is no match.
@@ -631,18 +637,6 @@ class Scratch3SpeechBlocks {
         }
     }
 
-    // Disconnect all the audio stuff on the client.
-    _suspendListening () {
-        console.log('suspending listenting');
-        // this gets called on green flag when context may not exist yet.
-        if (this._context) {
-            console.log('suspending audio context.');
-            this._context.suspend.bind(this._context);
-            this._scriptNode.disconnect();
-        }
-        if (this._sourceNode) this._sourceNode.disconnect();
-    }
-
     /**
      * Handle a message from the socket. It contains transcription results.
      * @param {MessageEvent} e The message event containing data from speech server.
@@ -690,7 +684,7 @@ class Scratch3SpeechBlocks {
             this._startRecording();
         }
         // Force the block to timeout if we don't get any results back/the user didn't say anything.
-        this._speechTimeoutId = setTimeout(this._timeOutListening, listenAndWaitBlockTimeoutMs);
+        this._speechTimeoutId = setTimeout(this._stopTranscription, listenAndWaitBlockTimeoutMs);
     }
 
     /**
@@ -839,6 +833,7 @@ class Scratch3SpeechBlocks {
         if (this._socket.readyState === WebSocket.CLOSED ||
         this._socket.readyState === WebSocket.CLOSING) {
             log.error(`Not sending data because not in ready state. State: ${this._socket.readyState}`);
+            // TODO: should we stop trying???
             return;
         }
         const MAX_INT = Math.pow(2, 16 - 1) - 1;
