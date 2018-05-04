@@ -2,6 +2,8 @@ const ArgumentType = require('../../extension-support/argument-type');
 const Cast = require('../../util/cast');
 const BlockType = require('../../extension-support/block-type');
 const log = require('../../util/log');
+const DiffMatchPatch = require('diff-match-patch');
+
 
 /**
  * Url of icon to be displayed at the left edge of each extension block.
@@ -162,16 +164,14 @@ class Scratch3SpeechBlocks {
          */
         this._endSoundBuffer = null;
 
-        // At what point is no match declared (0.0 = perfection, 1.0 = very loose).
-        this.Match_Threshold = 0.3;
-        // How far to search for a match (0 = exact location, 1000+ = broad match).
-        // A match this many characters away from the expected location will add
-        // 1.0 to the score (0.0 is a perfect match).
-        this.Match_Distance = 1000;
 
-        // The number of bits in an int.
-        this.Match_MaxBits = 32;
-
+        /**
+         * Diff Match Patch is used to do some fuzzy matching of the transcription results
+         * with what is in the hat blocks.
+         */
+        this._dmp = new DiffMatchPatch();
+        // Threshold for diff match patch to use: (0.0 = perfection, 1.0 = very loose).
+        this._dmp.Match_Threshold = 0.3;
 
         // Come back and figure out which of these I really need.
         this._startListening = this._startListening.bind(this);
@@ -192,175 +192,6 @@ class Scratch3SpeechBlocks {
 
         // Load in the start and stop listening indicator sounds.
         this._loadUISounds();
-    }
-
-    //  MATCH FUNCTIONS
-
-    /**
-   * Locate the best instance of 'pattern' in 'text' near 'loc'.
-   * @param {string} text The text to search.
-   * @param {string} pattern The pattern to search for.
-   * @param {number} loc The location to search around.
-   * @return {number} Best match index or -1.
-   */
-    match_main (text, pattern, loc) {
-    // Check for null inputs.
-        if (text == null || pattern == null || loc == null) {
-            throw new Error('Null input. (match_main)');
-        }
-
-        loc = Math.max(0, Math.min(loc, text.length));
-        if (text == pattern) {
-            // Shortcut (potentially not guaranteed by the algorithm)
-            return 0;
-        } else if (!text.length) {
-            // Nothing to match.
-            return -1;
-        } else if (text.substring(loc, loc + pattern.length) == pattern) {
-            // Perfect match at the perfect spot!  (Includes case of null pattern)
-            return loc;
-        }
-        // Do a fuzzy compare.
-        return this.match_bitap_(text, pattern, loc);
-    
-    }
-
-
-    /**
-   * Locate the best instance of 'pattern' in 'text' near 'loc' using the
-   * Bitap algorithm.
-   * @param {string} text The text to search.
-   * @param {string} pattern The pattern to search for.
-   * @param {number} loc The location to search around.
-   * @return {number} Best match index or -1.
-   * @private
-   */
-    match_bitap_ (text, pattern, loc) {
-        if (pattern.length > this.Match_MaxBits) {
-            throw new Error('Pattern too long for this browser.');
-            // console.log('Too long for match algorithm');
-            // return -1;
-        }
-
-        // Initialise the alphabet.
-        const s = this.match_alphabet_(pattern);
-
-        const dmp = this; // 'this' becomes 'window' in a closure.
-
-        /**
-     * Compute and return the score for a match with e errors and x location.
-     * Accesses loc and pattern through being a closure.
-     * @param {number} e Number of errors in match.
-     * @param {number} x Location of match.
-     * @return {number} Overall score for match (0.0 = good, 1.0 = bad).
-     * @private
-     */
-        function match_bitapScore_ (e, x) {
-            const accuracy = e / pattern.length;
-            const proximity = Math.abs(loc - x);
-            if (!dmp.Match_Distance) {
-                // Dodge divide by zero error.
-                return proximity ? 1.0 : accuracy;
-            }
-            return accuracy + (proximity / dmp.Match_Distance);
-        }
-
-        // Highest score beyond which we give up.
-        let score_threshold = this.Match_Threshold;
-        // Is there a nearby exact match? (speedup)
-        let best_loc = text.indexOf(pattern, loc);
-        if (best_loc != -1) {
-            score_threshold = Math.min(match_bitapScore_(0, best_loc), score_threshold);
-            // What about in the other direction? (speedup)
-            best_loc = text.lastIndexOf(pattern, loc + pattern.length);
-            if (best_loc != -1) {
-                score_threshold =
-            Math.min(match_bitapScore_(0, best_loc), score_threshold);
-            }
-        }
-
-        // Initialise the bit arrays.
-        const matchmask = 1 << (pattern.length - 1);
-        best_loc = -1;
-
-        let bin_min, bin_mid;
-        let bin_max = pattern.length + text.length;
-        let last_rd;
-        for (let d = 0; d < pattern.length; d++) {
-            // Scan for the best match; each iteration allows for one more error.
-            // Run a binary search to determine how far from 'loc' we can stray at this
-            // error level.
-            bin_min = 0;
-            bin_mid = bin_max;
-            while (bin_min < bin_mid) {
-                if (match_bitapScore_(d, loc + bin_mid) <= score_threshold) {
-                    bin_min = bin_mid;
-                } else {
-                    bin_max = bin_mid;
-                }
-                bin_mid = Math.floor((bin_max - bin_min) / 2 + bin_min);
-            }
-            // Use the result from this iteration as the maximum for the next.
-            bin_max = bin_mid;
-            let start = Math.max(1, loc - bin_mid + 1);
-            const finish = Math.min(loc + bin_mid, text.length) + pattern.length;
-
-            const rd = Array(finish + 2);
-            rd[finish + 1] = (1 << d) - 1;
-            for (let j = finish; j >= start; j--) {
-                // The alphabet (s) is a sparse hash, so the following line generates
-                // warnings.
-                const charMatch = s[text.charAt(j - 1)];
-                if (d === 0) { // First pass: exact match.
-                    rd[j] = ((rd[j + 1] << 1) | 1) & charMatch;
-                } else { // Subsequent passes: fuzzy match.
-                    rd[j] = (((rd[j + 1] << 1) | 1) & charMatch) |
-                  (((last_rd[j + 1] | last_rd[j]) << 1) | 1) |
-                  last_rd[j + 1];
-                }
-                if (rd[j] & matchmask) {
-                    const score = match_bitapScore_(d, j - 1);
-                    // This match will almost certainly be better than any existing match.
-                    // But check anyway.
-                    if (score <= score_threshold) {
-                        // Told you so.
-                        score_threshold = score;
-                        best_loc = j - 1;
-                        if (best_loc > loc) {
-                            // When passing loc, don't exceed our current distance from loc.
-                            start = Math.max(1, 2 * loc - best_loc);
-                        } else {
-                            // Already passed loc, downhill from here on in.
-                            break;
-                        }
-                    }
-                }
-            }
-            // No hope for a (better) match at greater error levels.
-            if (match_bitapScore_(d + 1, loc) > score_threshold) {
-                break;
-            }
-            last_rd = rd;
-        }
-        return best_loc;
-    }
-
-
-    /**
-   * Initialise the alphabet for the Bitap algorithm.
-   * @param {string} pattern The text to encode.
-   * @return {!object} Hash of character locations.
-   * @private
-   */
-    match_alphabet_ (pattern) {
-        const s = {};
-        for (var i = 0; i < pattern.length; i++) {
-            s[pattern.charAt(i)] = 0;
-        }
-        for (var i = 0; i < pattern.length; i++) {
-            s[pattern.charAt(i)] |= 1 << (pattern.length - i - 1);
-        }
-        return s;
     }
 
     /**
@@ -581,8 +412,15 @@ class Scratch3SpeechBlocks {
             return -1;
         }
 
-        const loc = 0; // start looking for the match at the beginning of the string.
-        return this.match_main(text, pattern, loc);
+        let match = -1;
+        try {
+            // Look for the text in the pattern starting at position 0.
+            match = this._dmp.match_main(text, pattern, 0);
+        } catch (e) {
+            // This can happen inf the text or pattern gets too long.  If so just return no match.
+            return -1;
+        }
+        return match;
     }
     /**
      * Processes the results we get back from the speech server.  Decides whether the results
