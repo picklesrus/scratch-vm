@@ -481,7 +481,7 @@ class Scratch3SpeechBlocks {
             result = JSON.parse(e.data);
         } catch (ex) {
             log.error(`Problem parsing json. continuing: ${ex}`);
-            // TODO: stop stuff?
+            // TODO: Should we kill listening and continue?
             return;
         }
         this._processTranscriptionResult(result);
@@ -509,11 +509,9 @@ class Scratch3SpeechBlocks {
     _startListening () {
         // If we've already setup the context, we can resume instead of doing all the setup again.
         if (this._context) {
-            // TODO: rename to resumeListening?
-            this._resumeRecording();
+            this._resumeListening();
         } else {
-            // TODO: rename to initRecording. Or initListening?
-            this._startRecording();
+            this._initListening();
         }
         // Force the block to timeout if we don't get any results back/the user didn't say anything.
         this._speechTimeoutId = setTimeout(this._stopTranscription, listenAndWaitBlockTimeoutMs);
@@ -523,7 +521,7 @@ class Scratch3SpeechBlocks {
      * Resume listening for audio and re-open the socket to send data.
      * @private
      */
-    _resumeRecording () {
+    _resumeListening () {
         this._context.resume.bind(this._context);
         this._newWebsocket();
     }
@@ -533,7 +531,7 @@ class Scratch3SpeechBlocks {
      * that data to the speech server.
      * @private
      */
-    _startRecording () {
+    _initListening () {
         this._initializeMicrophone();
         this._initScriptNode();
         this._newWebsocket();
