@@ -174,17 +174,12 @@ class Scratch3SpeechBlocks {
         this._dmp.Match_Threshold = 0.3;
 
         // Come back and figure out which of these I really need.
-        this._startListening = this._startListening.bind(this);
-        this._startRecording = this._startRecording.bind(this);
-        this._newWebsocket = this._newWebsocket.bind(this);
         this._newSocketCallback = this._newSocketCallback.bind(this);
         this._setupSocketCallback = this._setupSocketCallback.bind(this);
         this._socketMessageCallback = this._socketMessageCallback.bind(this);
-        this._startByteStream = this._startByteStream.bind(this);
         this._processAudioCallback = this._processAudioCallback.bind(this);
         this._onTranscriptionFromServer = this._onTranscriptionFromServer.bind(this);
         this._resetListening = this._resetListening.bind(this);
-        this._stopListening = this._stopListening.bind(this);
         this._stopTranscription = this._stopTranscription.bind(this);
 
 
@@ -411,17 +406,17 @@ class Scratch3SpeechBlocks {
         if (!pattern || !text) {
             return -1;
         }
-
         let match = -1;
         try {
             // Look for the text in the pattern starting at position 0.
             match = this._dmp.match_main(text, pattern, 0);
         } catch (e) {
-            // This can happen inf the text or pattern gets too long.  If so just return no match.
-            return -1;
+            // This can happen inf the text or pattern gets too long.  If so just substring match.
+            return pattern.indexOf(text);
         }
         return match;
     }
+
     /**
      * Processes the results we get back from the speech server.  Decides whether the results
      * are good enough to keep. If they are, resolves the 'Listen and Wait' blocks promise and cleans up.
