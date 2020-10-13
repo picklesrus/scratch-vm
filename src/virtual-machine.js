@@ -665,7 +665,7 @@ class VirtualMachine extends EventEmitter {
      */
     addCostumeFromLibrary (md5ext, costumeObject) {
         if (!this.editingTarget) return Promise.reject();
-        return this.addCostume(md5ext, costumeObject, this.editingTarget.id, 2 /* optVersion */);
+        return this.addCostume(md5ext, costumeObject, this.editingTarget.id);
     }
 
     /**
